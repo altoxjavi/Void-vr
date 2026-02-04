@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>VOID VR</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <style>
+    .overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.95);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      font-family: system-ui, sans-serif;
+    }
+    .overlay.hidden { display: none; }
+    .overlay h1 {
+      font-size: 64px;
+      color: #ff2d7b;
+      text-shadow: 0 0 40px rgba(255,45,123,0.6);
+      margin: 0 0 10px 0;
+      letter-spacing: 0.3em;
+    }
+    .overlay p {
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 40px;
+    }
+    .overlay button {
+      background: linear-gradient(180deg, rgba(255,45,123,0.3), rgba(255,45,123,0.1));
+      border: 2px solid rgba(255,45,123,0.6);
+      color: white;
+      padding: 20px 60px;
+      font-size: 24px;
+      cursor: pointer;
+      margin: 10px;
+      transition: all 0.3s;
+    }
+    .overlay button:hover {
+      background: linear-gradient(180deg, rgba(255,45,123,0.5), rgba(255,45,123,0.2));
+      box-shadow: 0 0 40px rgba(255,45,123,0.5);
+      transform: scale(1.05);
+    }
+  </style>
+</head>
+<body>
+
+<!-- Entry Overlay -->
+<div class="overlay" id="overlay">
+  <h1>VOID</h1>
+  <p>Immersive Trance Experience</p>
+  <button id="enterVR">► ENTER VR</button>
+  <button id="enter2D">Start 2D</button>
+</div>
+
+<a-scene 
+  id="scene"
+  vr-mode-ui="enabled: false"
+  renderer="antialias: true"
+>
+  <!-- Spiral shader sky - rotated to face forward (-90 since +90 went behind) -->
+  <a-sky id="voidSky" void-spiral="intensity: 0.5" rotation="0 -90 0"></a-sky>
+  
+  <!-- ORIENTATION HELPERS - Remove these once positioning is confirmed -->
+  <!-- Forward = PINK (where you should be looking) -->
+  <a-box position="0 1.6 -3" width="0.3" height="0.3" depth="0.3" color="#ff2d7b" opacity="0.8"></a-box>
+  <!-- Left = GREEN -->
+  <a-box position="-3 1.6 0" width="0.2" height="0.2" depth="0.2" color="#00ff00" opacity="0.8"></a-box>
+  <!-- Right = BLUE -->
+  <a-box position="3 1.6 0" width="0.2" height="0.2" depth="0.2" color="#0088ff" opacity="0.8"></a-box>
+  <!-- Behind = RED -->
+  <a-box position="0 1.6 3" width="0.2" height="0.2" depth="0.2" color="#ff0000" opacity="0.8"></a-box>
+  
+  <!-- FLOOR GRID for spatial grounding -->
+  <a-entity id="floor">
+    <!-- Main floor plane -->
+    <a-plane position="0 0 0" rotation="-90 0 0" width="20" height="20" 
+             material="color: #0a0012; opacity: 0.9; transparent: true"></a-plane>
+    
+    <!-- Grid lines -->
+    <a-entity id="gridLines">
+      <!-- Concentric rings -->
+      <a-ring position="0 0.01 0" rotation="-90 0 0" radius-inner="0.95" radius-outer="1" color="#ff2d7b" opacity="0.3"></a-ring>
+      <a-ring position="0 0.01 0" rotation="-90 0 0" radius-inner="1.95" radius-outer="2" color="#ff2d7b" opacity="0.2"></a-ring>
+      <a-ring position="0 0.01 0" rotation="-90 0 0" radius-inner="2.95" radius-outer="3" color="#ff2d7b" opacity="0.15"></a-ring>
+      <a-ring position="0 0.01 0" rotation="-90 0 0" radius-inner="4.95" radius-outer="5" color="#ff2d7b" opacity="0.1"></a-ring>
+      
+      <!-- Center marker -->
+      <a-ring position="0 0.02 0" rotation="-90 0 0" radius-inner="0.1" radius-outer="0.2" color="#ff2d7b" opacity="0.5"></a-ring>
+      
+      <!-- Cardinal direction lines on floor -->
+      <a-box position="0 0.01 -2" width="0.02" height="0.01" depth="4" color="#ff2d7b" opacity="0.2"></a-box>
+      <a-box position="0 0.01 2" width="0.02" height="0.01" depth="4" color="#330011" opacity="0.2"></a-box>
+      <a-box position="-2 0.01 0" width="4" height="0.01" depth="0.02" color="#00ff00" opacity="0.15"></a-box>
+      <a-box position="2 0.01 0" width="4" height="0.01" depth="0.02" color="#0088ff" opacity="0.15"></a-box>
+    </a-entity>
+  </a-entity>
+  
+  <!-- VR DEBUG CONSOLE - follows your head height -->
+  <a-entity id="debugConsole" position="0 2.5 -2" follow-camera-height="offsetY: 0.6; offsetZ: -2">
+    <a-plane width="2" height="0.8" color="#000" opacity="0.8"></a-plane>
+    <a-text id="debugText" 
+            value="[Console Ready]" 
+            color="#0f0" 
+            width="1.8" 
+            position="0 0 0.01"
+            align="center"
+            wrap-count="50">
+    </a-text>
+  </a-entity>
+  
+  <!-- Camera -->
+  <a-entity id="rig" position="0 1.6 0">
+    <a-camera></a-camera>
+  </a-entity>
+</a-scene>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// VR DEBUG CONSOLE - See logs in the headset!
+// ═══════════════════════════════════════════════════════════════
+
+const debugLines = [];
+const MAX_LINES = 8;
+const originalLog = console.log;
+const originalError = console.error;
+const originalWarn = console.warn;
+
+function vrLog(msg, type = 'log') {
+  const prefix = type === 'error' ? '❌ ' : type === 'warn' ? '⚠️ ' : '→ ';
+  const line = prefix + String(msg).substring(0, 60);
+  debugLines.push(line);
+  if (debugLines.length > MAX_LINES) debugLines.shift();
+  
+  // Update VR display
+  const debugText = document.getElementById('debugText');
+  if (debugText) {
+    debugText.setAttribute('value', debugLines.join('\n'));
+  }
+  
+  // Also call original
+  originalLog.apply(console, arguments);
+}
+
+console.log = function() {
+  vrLog(Array.from(arguments).join(' '), 'log');
+};
+console.error = function() {
+  vrLog(Array.from(arguments).join(' '), 'error');
+};
+console.warn = function() {
+  vrLog(Array.from(arguments).join(' '), 'warn');
+};
+
+// Catch unhandled errors too
+window.onerror = function(msg, url, line) {
+  vrLog(`ERROR L${line}: ${msg}`, 'error');
+};
+
+console.log('[VOID] VR Console active');
+
+// ═══════════════════════════════════════════════════════════════
+// CAMERA-RELATIVE POSITIONING
+// Makes elements position relative to user's actual head position
+// ═══════════════════════════════════════════════════════════════
+
+AFRAME.registerComponent('follow-camera-height', {
+  schema: {
+    offsetY: { type: 'number', default: 0.8 },   // Above camera
+    offsetZ: { type: 'number', default: -2 },    // In front
+    smoothing: { type: 'number', default: 0.1 }  // Lerp factor
+  },
+  
+  init: function() {
+    this.camera = document.querySelector('[camera]');
+    this.targetY = this.el.object3D.position.y;
+    console.log('Camera-follow component ready');
+  },
+  
+  tick: function() {
+    if (!this.camera) return;
+    
+    // Get camera world position
+    const camPos = this.camera.object3D.position;
+    const camWorldPos = new THREE.Vector3();
+    this.camera.object3D.getWorldPosition(camWorldPos);
+    
+    // Target position: in front of camera, offset up
+    this.targetY = camWorldPos.y + this.data.offsetY;
+    
+    // Smooth lerp to target
+    const currentY = this.el.object3D.position.y;
+    this.el.object3D.position.y = currentY + (this.targetY - currentY) * this.data.smoothing;
+    
+    // Keep in front of user (z only, don't rotate)
+    this.el.object3D.position.z = this.data.offsetZ;
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// VOID SPIRAL SHADER COMPONENT
+// ═══════════════════════════════════════════════════════════════
+
+AFRAME.registerShader('void-spiral-material', {
+  schema: {
+    time: { type: 'time', is: 'uniform' },
+    intensity: { type: 'number', is: 'uniform', default: 0.5 },
+    phase: { type: 'number', is: 'uniform', default: 0.0 },
+    pulseHz: { type: 'number', is: 'uniform', default: 8.0 }
+  },
+  
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  
+  fragmentShader: `
+    uniform float time;
+    uniform float intensity;
+    uniform float phase;
+    uniform float pulseHz;
+    varying vec2 vUv;
+    
+    #define PI 3.14159265359
+    
+    void main() {
+      // Convert UV to centered coordinates
+      // A-Frame sky maps UV so we adjust for spherical
+      vec2 uv = vUv - 0.5;
+      uv.x *= 2.0; // Adjust for sky sphere aspect
+      
+      float t = time * 0.001; // Convert ms to seconds
+      
+      // Polar coordinates
+      float angle = atan(uv.y, uv.x);
+      float radius = length(uv);
+      
+      // Multi-layer spiral
+      float spiral1 = sin(angle * 4.0 - t * 2.0 + radius * 15.0);
+      float spiral2 = sin(angle * 6.0 + t * 1.5 - radius * 20.0);
+      float spiral3 = sin(angle * 3.0 - t * 1.0 + radius * 10.0);
+      
+      // Plasma waves
+      float plasma = sin(uv.x * 8.0 + t) * sin(uv.y * 8.0 + t * 1.2);
+      plasma += sin(radius * 12.0 - t * 3.0) * 0.5;
+      
+      // Combine
+      float pattern = spiral1 * 0.35 + spiral2 * 0.25 + spiral3 * 0.2 + plasma * 0.2;
+      pattern = pattern * 0.5 + 0.5; // Normalize
+      
+      // Pulse with binaural frequency
+      float pulse = 0.5 + 0.5 * sin(t * pulseHz * 0.5);
+      
+      // Colors - VOID theme (deep purple/pink/cyan)
+      vec3 bg = vec3(0.02, 0.0, 0.05);
+      vec3 color1 = vec3(0.6, 0.1, 0.4);  // Magenta
+      vec3 color2 = vec3(0.3, 0.0, 0.6);  // Purple
+      vec3 color3 = vec3(0.0, 0.6, 0.8);  // Cyan
+      vec3 glow = vec3(1.0, 0.3, 0.6);    // Pink glow
+      
+      // Build color
+      vec3 col = bg;
+      col = mix(col, color1, smoothstep(0.3, 0.6, pattern) * intensity);
+      col = mix(col, color2, smoothstep(0.5, 0.8, spiral1 * 0.5 + 0.5) * intensity);
+      col = mix(col, color3, smoothstep(0.6, 0.9, spiral2 * 0.5 + 0.5) * intensity * 0.5);
+      
+      // Central glow
+      float glowAmt = exp(-radius * 3.0) * intensity;
+      col += glow * glowAmt * 0.4;
+      
+      // Pulse accent
+      col += color3 * pulse * 0.1 * intensity;
+      
+      // Phase color shift
+      col = mix(col, col.gbr, phase * 0.3);
+      
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `
+});
+
+// Component to apply the shader and animate it
+AFRAME.registerComponent('void-spiral', {
+  schema: {
+    intensity: { type: 'number', default: 0.5 }
+  },
+  
+  init: function() {
+    // Apply our custom shader material to the sky
+    this.el.setAttribute('material', {
+      shader: 'void-spiral-material',
+      intensity: this.data.intensity,
+      phase: 0,
+      pulseHz: 8
+    });
+    
+    this.phase = 0;
+    this.intensity = this.data.intensity;
+    this.targetIntensity = this.data.intensity;
+    this.started = false;
+    this.tickCount = 0;
+    this.lastLogTime = 0;
+    
+    console.log('Spiral component init');
+  },
+  
+  start: function() {
+    this.started = true;
+    this.targetIntensity = 1.0;
+    console.log('Spiral ramping up');
+  },
+  
+  tick: function(time, delta) {
+    this.tickCount++;
+    
+    // Log every 2 seconds so we know it's running
+    if (time - this.lastLogTime > 2000) {
+      this.lastLogTime = time;
+      console.log('Tick #' + this.tickCount + ' t=' + Math.round(time/1000) + 's');
+    }
+    
+    // Animation always runs via the 'time' uniform in the shader
+    // This tick just handles intensity ramping after start()
+    
+    if (this.started && this.intensity < this.targetIntensity) {
+      this.intensity = Math.min(this.intensity + delta * 0.0002, this.targetIntensity);
+      this.el.setAttribute('material', 'intensity', this.intensity);
+    }
+    
+    // Slowly shift phase over time (color evolution)
+    if (this.started) {
+      this.phase = Math.min(this.phase + delta * 0.00002, 1.0);
+      this.el.setAttribute('material', 'phase', this.phase);
+    }
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// AUDIO ENGINE
+// ═══════════════════════════════════════════════════════════════
+
+let audioCtx, masterGain, droneL, droneR;
+
+function initAudio() {
+  if (audioCtx) return;
+  
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0;
+  masterGain.connect(audioCtx.destination);
+  
+  // Left ear: 110 Hz
+  droneL = audioCtx.createOscillator();
+  droneL.type = 'sine';
+  droneL.frequency.value = 110;
+  const gainL = audioCtx.createGain();
+  gainL.gain.value = 0.12;
+  const panL = audioCtx.createStereoPanner();
+  panL.pan.value = -1;
+  droneL.connect(gainL).connect(panL).connect(masterGain);
+  
+  // Right ear: 118 Hz (8 Hz binaural difference = alpha/theta)
+  droneR = audioCtx.createOscillator();
+  droneR.type = 'sine';
+  droneR.frequency.value = 118;
+  const gainR = audioCtx.createGain();
+  gainR.gain.value = 0.12;
+  const panR = audioCtx.createStereoPanner();
+  panR.pan.value = 1;
+  droneR.connect(gainR).connect(panR).connect(masterGain);
+  
+  // Sub bass
+  const sub = audioCtx.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.value = 55;
+  const subGain = audioCtx.createGain();
+  subGain.gain.value = 0.08;
+  sub.connect(subGain).connect(masterGain);
+  
+  // Start oscillators
+  droneL.start();
+  droneR.start();
+  sub.start();
+  
+  // Fade in
+  masterGain.gain.setTargetAtTime(0.6, audioCtx.currentTime, 3);
+  
+  console.log('[VOID] Audio started');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN LOGIC
+// ═══════════════════════════════════════════════════════════════
+
+const scene = document.getElementById('scene');
+const overlay = document.getElementById('overlay');
+const voidSky = document.getElementById('voidSky');
+
+function startExperience() {
+  overlay.classList.add('hidden');
+  initAudio();
+  
+  // Start the spiral animation
+  const spiral = voidSky.components['void-spiral'];
+  if (spiral) spiral.start();
+}
+
+// VR Button
+document.getElementById('enterVR').addEventListener('click', () => {
+  console.log('Entering VR...');
+  startExperience();
+  scene.enterVR();
+});
+
+// 2D Button  
+document.getElementById('enter2D').addEventListener('click', () => {
+  console.log('Starting 2D mode...');
+  startExperience();
+});
+
+// VR events
+scene.addEventListener('enter-vr', () => {
+  console.log('VR session started!');
+});
+
+scene.addEventListener('exit-vr', () => {
+  console.log('Exited VR');
+});
+
+scene.addEventListener('loaded', () => {
+  console.log('A-Frame scene loaded');
+});
+
+// Log when shader is ready
+setTimeout(() => {
+  const sky = document.getElementById('voidSky');
+  if (sky && sky.components.material) {
+    console.log('Shader material ready');
+  } else {
+    console.warn('Shader not found on sky');
+  }
+  
+  // Log camera height
+  const cam = document.querySelector('[camera]');
+  if (cam) {
+    const pos = new THREE.Vector3();
+    cam.object3D.getWorldPosition(pos);
+    console.log('Camera Y: ' + pos.y.toFixed(2) + 'm');
+  }
+}, 1000);
+
+// Log camera height every 10 seconds (helps debug positioning)
+setInterval(() => {
+  const cam = document.querySelector('[camera]');
+  if (cam) {
+    const pos = new THREE.Vector3();
+    cam.object3D.getWorldPosition(pos);
+    console.log('Cam height: ' + pos.y.toFixed(2) + 'm');
+  }
+}, 10000);
+</script>
+</body>
+</html>
