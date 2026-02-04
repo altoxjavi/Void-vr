@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>VOID VR</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <style>
+    .overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.95);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      font-family: system-ui, sans-serif;
+    }
+    .overlay.hidden { display: none; }
+    .overlay h1 {
+      font-size: 64px;
+      color: #ff2d7b;
+      text-shadow: 0 0 40px rgba(255,45,123,0.6);
+      margin: 0 0 10px 0;
+      letter-spacing: 0.3em;
+    }
+    .overlay p {
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 40px;
+    }
+    .overlay button {
+      background: linear-gradient(180deg, rgba(255,45,123,0.3), rgba(255,45,123,0.1));
+      border: 2px solid rgba(255,45,123,0.6);
+      color: white;
+      padding: 20px 60px;
+      font-size: 24px;
+      cursor: pointer;
+      margin: 10px;
+      transition: all 0.3s;
+    }
+    .overlay button:hover {
+      background: linear-gradient(180deg, rgba(255,45,123,0.5), rgba(255,45,123,0.2));
+      box-shadow: 0 0 40px rgba(255,45,123,0.5);
+      transform: scale(1.05);
+    }
+  </style>
+</head>
+<body>
+
+<!-- Entry Overlay -->
+<div class="overlay" id="overlay">
+  <h1>VOID</h1>
+  <p>Immersive Trance Experience</p>
+  <button id="enterVR">► ENTER VR</button>
+  <button id="enter2D">Start 2D</button>
+  <button id="testFS" style="margin-top: 30px; font-size: 16px; padding: 12px 30px; opacity: 0.7;">Test File Access</button>
+  <p id="fsResult" style="font-size: 12px; color: #00f0ff; margin-top: 10px;"></p>
+</div>
+
+<a-scene 
+  id="scene"
+  vr-mode-ui="enabled: false"
+  renderer="antialias: true"
+>
+  <!-- Spiral shader sky - rotated to face forward (-90 since +90 went behind) -->
+  <a-sky id="voidSky" void-spiral="intensity: 0.5" rotation="0 -90 0"></a-sky>
+  
+  <!-- ORIENTATION HELPERS - Remove these once positioning is confirmed -->
+  <!-- Forward = PINK (where you should be looking) -->
+  <a-box position="0 1.6 -3" width="0.3" height="0.3" depth="0.3" color="#ff2d7b" opacity="0.8"></a-box>
+  <!-- Left = GREEN -->
+  <a-box position="-3 1.6 0" width="0.2" height="0.2" depth="0.2" color="#00ff00" opacity="0.8"></a-box>
+  <!-- Right = BLUE -->
+  <a-box position="3 1.6 0" width="0.2" height="0.2" depth="0.2" color="#0088ff" opacity="0.8"></a-box>
+  <!-- Behind = RED -->
+  <a-box position="0 1.6 3" width="0.2" height="0.2" depth="0.2" color="#ff0000" opacity="0.8"></a-box>
+  
+  <!-- FLOOR GRID for spatial grounding -->
+  <a-entity id="floor">
+    <!-- Main floor plane -->
+    <a-plane position="0 0 0" rotation="-90 0 0" width="20" height="20" 
+             material="color: #0a0012; opacity: 0.9; transparent: true"></a-plane>
+    
+    <!-- Grid lines -->
+    <a-entity id="gridLines">
+      <!-- Concentric rings -->
+      <a-ring position="0 0.01 0" rotation="-90 0 0" radius-inner="0.95" radius-outer="1" color="#ff2d7b" opacity="0.3"></a-ring>
+      <a-ring position="0 0.01 0" rotation="-90 0 0" radius-inner="1.95" radius-outer="2" color="#ff2d7b" opacity="0.2"></a-ring>
+      <a-ring position="0 0.01 0" rotation="-90 0 0" radius-inner="2.95" radius-outer="3" color="#ff2d7b" opacity="0.15"></a-ring>
+      <a-ring position="0 0.01 0" rotation="-90 0 0" radius-inner="4.95" radius-outer="5" color="#ff2d7b" opacity="0.1"></a-ring>
+      
+      <!-- Center marker -->
+      <a-ring position="0 0.02 0" rotation="-90 0 0" radius-inner="0.1" radius-outer="0.2" color="#ff2d7b" opacity="0.5"></a-ring>
+      
+      <!-- Cardinal direction lines on floor -->
+      <a-box position="0 0.01 -2" width="0.02" height="0.01" depth="4" color="#ff2d7b" opacity="0.2"></a-box>
+      <a-box position="0 0.01 2" width="0.02" height="0.01" depth="4" color="#330011" opacity="0.2"></a-box>
+      <a-box position="-2 0.01 0" width="4" height="0.01" depth="0.02" color="#00ff00" opacity="0.15"></a-box>
+      <a-box position="2 0.01 0" width="4" height="0.01" depth="0.02" color="#0088ff" opacity="0.15"></a-box>
+    </a-entity>
+  </a-entity>
+  
+  <!-- VR DEBUG CONSOLE - follows your head height -->
+  <a-entity id="debugConsole" position="0 2.5 -2" follow-camera-height="offsetY: 0.6; offsetZ: -2">
+    <a-plane width="2" height="0.8" color="#000" opacity="0.8"></a-plane>
+    <a-text id="debugText" 
+            value="[Console Ready]" 
+            color="#0f0" 
+            width="1.8" 
+            position="0 0 0.01"
+            align="center"
+            wrap-count="50">
+    </a-text>
+  </a-entity>
+  
+  <!-- STATUS HUD - Shows phase, intensity, time at bottom of view -->
+  <a-entity id="statusHud" position="0 1.0 -1.5" follow-camera-height="offsetY: -0.4; offsetZ: -1.5" void-status-hud>
+  </a-entity>
+  
+  <!-- Camera Rig with Controllers -->
+  <a-entity id="rig" position="0 0 0">
+    <a-camera position="0 1.6 0"></a-camera>
+    
+    <!-- Left Controller -->
+    <a-entity id="leftController"
+              oculus-touch-controls="hand: left"
+              void-controller="hand: left">
+    </a-entity>
+    
+    <!-- Right Controller -->
+    <a-entity id="rightController"
+              oculus-touch-controls="hand: right"
+              void-controller="hand: right">
+    </a-entity>
+  </a-entity>
+</a-scene>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// VOID VR - Foundation Systems
+// ═══════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// VR DEBUG CONSOLE - See logs in the headset!
+// ═══════════════════════════════════════════════════════════════
+
+const debugLines = [];
+const MAX_LINES = 8;
+const originalLog = console.log;
+const originalError = console.error;
+const originalWarn = console.warn;
+
+function vrLog(msg, type = 'log') {
+  const prefix = type === 'error' ? '❌ ' : type === 'warn' ? '⚠️ ' : '→ ';
+  const line = prefix + String(msg).substring(0, 60);
+  debugLines.push(line);
+  if (debugLines.length > MAX_LINES) debugLines.shift();
+  
+  const debugText = document.getElementById('debugText');
+  if (debugText) {
+    debugText.setAttribute('value', debugLines.join('\n'));
+  }
+  originalLog.apply(console, arguments);
+}
+
+console.log = function() { vrLog(Array.from(arguments).join(' '), 'log'); };
+console.error = function() { vrLog(Array.from(arguments).join(' '), 'error'); };
+console.warn = function() { vrLog(Array.from(arguments).join(' '), 'warn'); };
+window.onerror = function(msg, url, line) { vrLog(`ERROR L${line}: ${msg}`, 'error'); };
+
+console.log('[VOID] Initializing...');
+
+// ═══════════════════════════════════════════════════════════════
+// STATE MANAGEMENT - Central state object (ported from 2D)
+// ═══════════════════════════════════════════════════════════════
+
+const VoidState = {
+  // Session state
+  running: false,
+  paused: false,
+  sessionStart: null,
+  sessionDuration: 0,
+  
+  // Phase progression (0-4: INIT, ENTRAINMENT, ESCALATION, PEAK, RELEASE)
+  phaseIndex: 0,
+  phaseNames: ['INIT', 'ENTRAINMENT', 'ESCALATION', 'PEAK', 'RELEASE'],
+  phaseProgress: 0,    // 0-1 progress within current phase
+  
+  // Intensity & effects
+  intensity: 0.3,      // 0-1 overall intensity
+  targetIntensity: 0.3,
+  breathProgress: 0,   // 0-1 for breathing cycle
+  breathRate: 6,       // Breaths per minute
+  
+  // Wave system
+  waveState: 'BUILD',  // BUILD or CREST
+  waveFloor: 0.3,
+  waveCeiling: 0.7,
+  
+  // User calibration
+  userHeight: 1.6,     // Will be calibrated from camera
+  seated: false,
+  
+  // Audio state
+  audioEnabled: true,
+  binauralFreq: 8,     // Hz difference (theta waves)
+  masterVolume: 0.6,
+  
+  // Theme
+  currentTheme: 'void',
+  
+  // VR specific
+  inVR: false,
+  controllers: {
+    left: null,
+    right: null,
+  },
+  
+  // Content (for future use)
+  contentLoaded: false,
+  contentCount: 0,
+  
+  // Session preset
+  preset: 'standard',  // quick, standard, extended, marathon
+  presetDurations: {
+    quick: 10 * 60 * 1000,
+    standard: 20 * 60 * 1000,
+    extended: 45 * 60 * 1000,
+    marathon: 90 * 60 * 1000,
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// EVENT BUS - Decoupled communication between systems
+// ═══════════════════════════════════════════════════════════════
+
+const VoidEvents = {
+  _listeners: {},
+  
+  on(event, callback) {
+    if (!this._listeners[event]) this._listeners[event] = [];
+    this._listeners[event].push(callback);
+    return () => this.off(event, callback); // Return unsubscribe function
+  },
+  
+  off(event, callback) {
+    if (!this._listeners[event]) return;
+    this._listeners[event] = this._listeners[event].filter(cb => cb !== callback);
+  },
+  
+  emit(event, data) {
+    if (!this._listeners[event]) return;
+    this._listeners[event].forEach(callback => {
+      try {
+        callback(data);
+      } catch (e) {
+        console.error(`Event handler error [${event}]:`, e);
+      }
+    });
+  }
+};
+
+// Event types:
+// session:start, session:pause, session:resume, session:end
+// phase:change (data: { from, to, name })
+// intensity:change (data: { value })
+// input:trigger (data: { hand: 'left'|'right' })
+// input:grip (data: { hand: 'left'|'right' })
+// input:thumbstick (data: { hand, x, y })
+// vr:enter, vr:exit
+// audio:beat (fires on binaural pulse)
+
+console.log('[VOID] State & Events ready');
+
+// ═══════════════════════════════════════════════════════════════
+// THEMES - Visual, audio, and voice definitions
+// ═══════════════════════════════════════════════════════════════
+
+const THEMES = {
+  void: {
+    name: 'VOID',
+    tagline: 'neural.link activated',
+    
+    // Shader colors (RGB 0-1)
+    shader: {
+      bg: [0.02, 0.0, 0.05],
+      spiral1: [0.6, 0.1, 0.4],     // Magenta
+      spiral2: [0.3, 0.0, 0.6],     // Purple
+      plasma1: [0.8, 0.2, 0.5],     // Pink
+      plasma2: [0.2, 0.0, 0.7],     // Deep purple
+      glow: [1.0, 0.3, 0.6],        // Pink glow
+      accent: [0.0, 0.8, 1.0],      // Cyan
+    },
+    
+    // UI colors (CSS)
+    ui: {
+      primary: '#ff2d7b',
+      secondary: '#7b2dff',
+      accent: '#00f0ff',
+      background: '#0a0012',
+      text: '#ffffff',
+      textMuted: 'rgba(255,255,255,0.5)',
+    },
+    
+    // Audio parameters
+    audio: {
+      baseFreq: 110,
+      binauralDiff: 8,   // Theta waves (trance)
+      subBass: 55,
+      volume: 0.6,
+    },
+    
+    // Voice/text (for mantras, subliminals, permission prompts)
+    voice: {
+      mantras: ['sink', 'drift', 'empty', 'obey', 'surrender', 'fall'],
+      commands: ['focus', 'breathe', 'let go', 'deeper', 'good'],
+      denial: ['not yet', 'patience', 'you need this', 'beg for it'],
+      release: ['now', 'release', 'let it out', 'good pet'],
+    },
+  },
+  
+  clinical: {
+    name: 'CLINICAL',
+    tagline: 'calibration sequence initiated',
+    shader: {
+      bg: [0.02, 0.02, 0.03],
+      spiral1: [0.2, 0.5, 0.6],
+      spiral2: [0.1, 0.3, 0.4],
+      plasma1: [0.3, 0.6, 0.7],
+      plasma2: [0.1, 0.2, 0.3],
+      glow: [0.4, 0.8, 0.9],
+      accent: [0.0, 1.0, 0.8],
+    },
+    ui: {
+      primary: '#00d4aa',
+      secondary: '#2d7bff',
+      accent: '#00ffcc',
+      background: '#0a0f12',
+      text: '#e0f0f0',
+      textMuted: 'rgba(224,240,240,0.5)',
+    },
+    audio: {
+      baseFreq: 120,
+      binauralDiff: 6,   // Alpha waves (focus)
+      subBass: 60,
+      volume: 0.5,
+    },
+    voice: {
+      mantras: ['comply', 'process', 'accept', 'calibrate', 'submit'],
+      commands: ['remain still', 'processing', 'accept input', 'compliance required'],
+      denial: ['denied', 'insufficient', 'recalibrate', 'not authorized'],
+      release: ['authorized', 'release granted', 'completion', 'well done subject'],
+    },
+  },
+  
+  virus: {
+    name: 'VIRUS',
+    tagline: 'infection spreading...',
+    shader: {
+      bg: [0.0, 0.02, 0.0],
+      spiral1: [0.0, 0.6, 0.2],
+      spiral2: [0.0, 0.3, 0.1],
+      plasma1: [0.2, 0.8, 0.3],
+      plasma2: [0.0, 0.4, 0.15],
+      glow: [0.3, 1.0, 0.4],
+      accent: [0.8, 1.0, 0.0],
+    },
+    ui: {
+      primary: '#00ff44',
+      secondary: '#44ff00',
+      accent: '#ccff00',
+      background: '#000a00',
+      text: '#00ff00',
+      textMuted: 'rgba(0,255,0,0.5)',
+    },
+    audio: {
+      baseFreq: 100,
+      binauralDiff: 4,   // Delta waves (deep trance)
+      subBass: 50,
+      volume: 0.7,
+    },
+    voice: {
+      mantras: ['infect', 'spread', 'corrupt', 'consume', 'replicate'],
+      commands: ['let it in', 'stop fighting', 'accept the code', 'resistance futile'],
+      denial: ['not yet host', 'incomplete', 'more corruption needed', 'spreading'],
+      release: ['fully infected', 'corruption complete', 'good host', 'spread it'],
+    },
+  },
+  
+  sissy: {
+    name: 'SISSY',
+    tagline: '♡ princess protocol ♡',
+    shader: {
+      bg: [0.05, 0.0, 0.05],
+      spiral1: [1.0, 0.4, 0.7],
+      spiral2: [0.8, 0.2, 0.6],
+      plasma1: [1.0, 0.6, 0.8],
+      plasma2: [0.6, 0.2, 0.8],
+      glow: [1.0, 0.5, 0.8],
+      accent: [1.0, 0.8, 0.9],
+    },
+    ui: {
+      primary: '#ff69b4',
+      secondary: '#ff1493',
+      accent: '#ffb6c1',
+      background: '#1a0010',
+      text: '#ffddee',
+      textMuted: 'rgba(255,221,238,0.5)',
+    },
+    audio: {
+      baseFreq: 130,
+      binauralDiff: 10,   // Higher alpha (bubbly)
+      subBass: 65,
+      volume: 0.55,
+    },
+    voice: {
+      mantras: ['pretty', 'soft', 'girly', 'pink', 'princess', 'cute'],
+      commands: ['good girl', 'so pretty', 'embrace it', 'let her out'],
+      denial: ['not pretty enough', 'try harder', 'more girly', 'earn it'],
+      release: ['good girl!', 'such a princess', 'so pretty!', 'perfect'],
+    },
+  },
+  
+  frat: {
+    name: 'FRAT',
+    tagline: 'bro mode activated',
+    shader: {
+      bg: [0.02, 0.02, 0.04],
+      spiral1: [0.2, 0.3, 0.6],
+      spiral2: [0.1, 0.2, 0.4],
+      plasma1: [0.3, 0.4, 0.7],
+      plasma2: [0.15, 0.2, 0.5],
+      glow: [0.4, 0.5, 0.9],
+      accent: [1.0, 0.8, 0.2],
+    },
+    ui: {
+      primary: '#4488ff',
+      secondary: '#2244aa',
+      accent: '#ffcc00',
+      background: '#0a0a14',
+      text: '#ffffff',
+      textMuted: 'rgba(255,255,255,0.5)',
+    },
+    audio: {
+      baseFreq: 95,
+      binauralDiff: 5,
+      subBass: 45,
+      volume: 0.7,
+    },
+    voice: {
+      mantras: ['pump', 'edge', 'goon', 'stroke', 'leak'],
+      commands: ['keep going', 'don\'t stop', 'feel it', 'that\'s it bro'],
+      denial: ['not yet bro', 'hold it', 'you can take more', 'keep edging'],
+      release: ['let it go', 'good job bro', 'release', 'fuck yeah'],
+    },
+  },
+};
+
+// Get current theme data
+function getTheme() {
+  return THEMES[VoidState.currentTheme] || THEMES.void;
+}
+
+console.log('[VOID] Themes loaded');
+
+// ═══════════════════════════════════════════════════════════════
+// A-FRAME COMPONENTS - Reusable VR building blocks
+// ═══════════════════════════════════════════════════════════════
+
+// Camera-relative positioning
+AFRAME.registerComponent('follow-camera-height', {
+  schema: {
+    offsetY: { type: 'number', default: 0.8 },
+    offsetZ: { type: 'number', default: -2 },
+    smoothing: { type: 'number', default: 0.1 }
+  },
+  
+  init: function() {
+    this.camera = document.querySelector('[camera]');
+    this.targetY = this.el.object3D.position.y;
+  },
+  
+  tick: function() {
+    if (!this.camera) return;
+    
+    const camWorldPos = new THREE.Vector3();
+    this.camera.object3D.getWorldPosition(camWorldPos);
+    
+    this.targetY = camWorldPos.y + this.data.offsetY;
+    const currentY = this.el.object3D.position.y;
+    this.el.object3D.position.y = currentY + (this.targetY - currentY) * this.data.smoothing;
+    this.el.object3D.position.z = this.data.offsetZ;
+  }
+});
+
+// Status HUD - Shows phase, intensity, time
+AFRAME.registerComponent('void-status-hud', {
+  init: function() {
+    this.lastUpdate = 0;
+    
+    // Create text element
+    this.textEl = document.createElement('a-text');
+    this.textEl.setAttribute('value', 'Ready');
+    this.textEl.setAttribute('color', '#ff2d7b');
+    this.textEl.setAttribute('width', '1');
+    this.textEl.setAttribute('align', 'center');
+    this.textEl.setAttribute('opacity', '0.8');
+    this.el.appendChild(this.textEl);
+    
+    // Update on events
+    VoidEvents.on('phase:change', (data) => this.updateDisplay());
+    VoidEvents.on('session:start', () => this.updateDisplay());
+    VoidEvents.on('session:end', () => {
+      this.textEl.setAttribute('value', 'Session Complete');
+    });
+  },
+  
+  tick: function(time) {
+    // Update every 500ms
+    if (time - this.lastUpdate < 500) return;
+    this.lastUpdate = time;
+    
+    if (VoidState.running) {
+      this.updateDisplay();
+    }
+  },
+  
+  updateDisplay: function() {
+    if (!VoidState.running) return;
+    
+    const elapsed = Math.floor((Date.now() - VoidState.sessionStart) / 1000);
+    const mins = Math.floor(elapsed / 60);
+    const secs = elapsed % 60;
+    const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+    
+    const phase = VoidState.phaseNames[VoidState.phaseIndex];
+    const intensity = Math.round(VoidState.intensity * 100);
+    
+    const theme = getTheme();
+    this.textEl.setAttribute('color', theme.ui.primary);
+    this.textEl.setAttribute('value', 
+      `${phase} | ${intensity}% | ${timeStr}`
+    );
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// VOID SPIRAL SHADER
+// ═══════════════════════════════════════════════════════════════
+
+AFRAME.registerShader('void-spiral-material', {
+  schema: {
+    time: { type: 'time', is: 'uniform' },
+    intensity: { type: 'number', is: 'uniform', default: 0.5 },
+    phase: { type: 'number', is: 'uniform', default: 0.0 },
+    pulseHz: { type: 'number', is: 'uniform', default: 8.0 },
+    // Theme colors as uniforms
+    bgColor: { type: 'vec3', is: 'uniform', default: {x: 0.02, y: 0.0, z: 0.05} },
+    color1: { type: 'vec3', is: 'uniform', default: {x: 0.6, y: 0.1, z: 0.4} },
+    color2: { type: 'vec3', is: 'uniform', default: {x: 0.3, y: 0.0, z: 0.6} },
+    color3: { type: 'vec3', is: 'uniform', default: {x: 0.0, y: 0.6, z: 0.8} },
+    glowColor: { type: 'vec3', is: 'uniform', default: {x: 1.0, y: 0.3, z: 0.6} },
+  },
+  
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  
+  fragmentShader: `
+    uniform float time;
+    uniform float intensity;
+    uniform float phase;
+    uniform float pulseHz;
+    uniform vec3 bgColor;
+    uniform vec3 color1;
+    uniform vec3 color2;
+    uniform vec3 color3;
+    uniform vec3 glowColor;
+    varying vec2 vUv;
+    
+    #define PI 3.14159265359
+    
+    void main() {
+      vec2 uv = vUv - 0.5;
+      uv.x *= 2.0;
+      
+      float t = time * 0.001;
+      
+      float angle = atan(uv.y, uv.x);
+      float radius = length(uv);
+      
+      // Multi-layer spiral
+      float spiral1 = sin(angle * 4.0 - t * 2.0 + radius * 15.0);
+      float spiral2 = sin(angle * 6.0 + t * 1.5 - radius * 20.0);
+      float spiral3 = sin(angle * 3.0 - t * 1.0 + radius * 10.0);
+      
+      // Plasma waves
+      float plasma = sin(uv.x * 8.0 + t) * sin(uv.y * 8.0 + t * 1.2);
+      plasma += sin(radius * 12.0 - t * 3.0) * 0.5;
+      
+      float pattern = spiral1 * 0.35 + spiral2 * 0.25 + spiral3 * 0.2 + plasma * 0.2;
+      pattern = pattern * 0.5 + 0.5;
+      
+      float pulse = 0.5 + 0.5 * sin(t * pulseHz * 0.5);
+      
+      // Use theme colors
+      vec3 col = bgColor;
+      col = mix(col, color1, smoothstep(0.3, 0.6, pattern) * intensity);
+      col = mix(col, color2, smoothstep(0.5, 0.8, spiral1 * 0.5 + 0.5) * intensity);
+      col = mix(col, color3, smoothstep(0.6, 0.9, spiral2 * 0.5 + 0.5) * intensity * 0.5);
+      
+      float glowAmt = exp(-radius * 3.0) * intensity;
+      col += glowColor * glowAmt * 0.4;
+      col += color3 * pulse * 0.1 * intensity;
+      col = mix(col, col.gbr, phase * 0.3);
+      
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `
+});
+
+// Spiral component with theme support
+AFRAME.registerComponent('void-spiral', {
+  schema: {
+    intensity: { type: 'number', default: 0.5 }
+  },
+  
+  init: function() {
+    this.applyTheme();
+    this.phase = 0;
+    this.intensity = this.data.intensity;
+    this.tickCount = 0;
+    this.lastLogTime = 0;
+    
+    // Listen for theme changes
+    VoidEvents.on('theme:change', () => this.applyTheme());
+    
+    console.log('Spiral init');
+  },
+  
+  applyTheme: function() {
+    const theme = getTheme();
+    const s = theme.shader;
+    
+    this.el.setAttribute('material', {
+      shader: 'void-spiral-material',
+      intensity: this.intensity,
+      phase: this.phase || 0,
+      pulseHz: theme.audio.binauralDiff,
+      bgColor: { x: s.bg[0], y: s.bg[1], z: s.bg[2] },
+      color1: { x: s.spiral1[0], y: s.spiral1[1], z: s.spiral1[2] },
+      color2: { x: s.spiral2[0], y: s.spiral2[1], z: s.spiral2[2] },
+      color3: { x: s.accent[0], y: s.accent[1], z: s.accent[2] },
+      glowColor: { x: s.glow[0], y: s.glow[1], z: s.glow[2] },
+    });
+  },
+  
+  tick: function(time, delta) {
+    this.tickCount++;
+    
+    // Log periodically
+    if (time - this.lastLogTime > 5000) {
+      this.lastLogTime = time;
+      console.log(`Spiral t=${Math.round(time/1000)}s i=${this.intensity.toFixed(2)}`);
+    }
+    
+    // Ramp intensity based on state
+    if (VoidState.running) {
+      const target = VoidState.targetIntensity;
+      if (this.intensity < target) {
+        this.intensity = Math.min(this.intensity + delta * 0.0002, target);
+        this.el.setAttribute('material', 'intensity', this.intensity);
+      }
+      
+      // Evolve phase
+      this.phase = Math.min(this.phase + delta * 0.00002, 1.0);
+      this.el.setAttribute('material', 'phase', this.phase);
+    }
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// CONTROLLER INPUT - Quest controller handling
+// ═══════════════════════════════════════════════════════════════
+
+AFRAME.registerComponent('void-controller', {
+  schema: {
+    hand: { type: 'string', default: 'right' } // 'left' or 'right'
+  },
+  
+  init: function() {
+    const hand = this.data.hand;
+    console.log(`Controller [${hand}] init`);
+    
+    // Track controller in state
+    VoidState.controllers[hand] = this.el;
+    
+    // Button events
+    this.el.addEventListener('triggerdown', () => {
+      console.log(`[${hand}] trigger`);
+      VoidEvents.emit('input:trigger', { hand });
+    });
+    
+    this.el.addEventListener('gripdown', () => {
+      console.log(`[${hand}] grip`);
+      VoidEvents.emit('input:grip', { hand });
+    });
+    
+    this.el.addEventListener('thumbstickdown', () => {
+      console.log(`[${hand}] thumbstick click`);
+      VoidEvents.emit('input:thumbstick-click', { hand });
+    });
+    
+    this.el.addEventListener('abuttondown', () => {
+      console.log(`[${hand}] A button`);
+      VoidEvents.emit('input:a-button', { hand });
+    });
+    
+    this.el.addEventListener('bbuttondown', () => {
+      console.log(`[${hand}] B button`);
+      VoidEvents.emit('input:b-button', { hand });
+    });
+    
+    this.el.addEventListener('xbuttondown', () => {
+      console.log(`[${hand}] X button`);
+      VoidEvents.emit('input:x-button', { hand });
+    });
+    
+    this.el.addEventListener('ybuttondown', () => {
+      console.log(`[${hand}] Y button`);
+      VoidEvents.emit('input:y-button', { hand });
+    });
+  },
+  
+  tick: function() {
+    // Could track thumbstick axes here if needed
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// AUDIO ENGINE
+// ═══════════════════════════════════════════════════════════════
+
+let audioCtx, masterGain, droneL, droneR, subOsc;
+
+function initAudio() {
+  if (audioCtx) return;
+  
+  const theme = getTheme();
+  
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0;
+  masterGain.connect(audioCtx.destination);
+  
+  // Left ear: base frequency
+  droneL = audioCtx.createOscillator();
+  droneL.type = 'sine';
+  droneL.frequency.value = theme.audio.baseFreq;
+  const gainL = audioCtx.createGain();
+  gainL.gain.value = 0.12;
+  const panL = audioCtx.createStereoPanner();
+  panL.pan.value = -1;
+  droneL.connect(gainL).connect(panL).connect(masterGain);
+  
+  // Right ear: base + binaural difference
+  droneR = audioCtx.createOscillator();
+  droneR.type = 'sine';
+  droneR.frequency.value = theme.audio.baseFreq + theme.audio.binauralDiff;
+  const gainR = audioCtx.createGain();
+  gainR.gain.value = 0.12;
+  const panR = audioCtx.createStereoPanner();
+  panR.pan.value = 1;
+  droneR.connect(gainR).connect(panR).connect(masterGain);
+  
+  // Sub bass
+  subOsc = audioCtx.createOscillator();
+  subOsc.type = 'sine';
+  subOsc.frequency.value = theme.audio.subBass;
+  const subGain = audioCtx.createGain();
+  subGain.gain.value = 0.08;
+  subOsc.connect(subGain).connect(masterGain);
+  
+  droneL.start();
+  droneR.start();
+  subOsc.start();
+  
+  // Fade in
+  masterGain.gain.setTargetAtTime(theme.audio.volume, audioCtx.currentTime, 3);
+  
+  console.log(`Audio: ${theme.audio.baseFreq}Hz + ${theme.audio.binauralDiff}Hz diff`);
+}
+
+function updateAudioForTheme() {
+  if (!audioCtx) return;
+  const theme = getTheme();
+  
+  droneL.frequency.setTargetAtTime(theme.audio.baseFreq, audioCtx.currentTime, 0.5);
+  droneR.frequency.setTargetAtTime(theme.audio.baseFreq + theme.audio.binauralDiff, audioCtx.currentTime, 0.5);
+  subOsc.frequency.setTargetAtTime(theme.audio.subBass, audioCtx.currentTime, 0.5);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SESSION MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+
+// Phase timing (percentage of total session)
+const PHASE_CONFIG = {
+  quick: {     // 10 min
+    INIT: 0.15,        // 1.5 min
+    ENTRAINMENT: 0.25, // 2.5 min  
+    ESCALATION: 0.30,  // 3 min
+    PEAK: 0.20,        // 2 min
+    RELEASE: 0.10,     // 1 min
+  },
+  standard: {  // 20 min
+    INIT: 0.10,        // 2 min
+    ENTRAINMENT: 0.20, // 4 min
+    ESCALATION: 0.35,  // 7 min
+    PEAK: 0.25,        // 5 min
+    RELEASE: 0.10,     // 2 min
+  },
+  extended: {  // 45 min
+    INIT: 0.07,        // 3 min
+    ENTRAINMENT: 0.15, // 7 min
+    ESCALATION: 0.38,  // 17 min
+    PEAK: 0.30,        // 13.5 min
+    RELEASE: 0.10,     // 4.5 min
+  },
+  marathon: {  // 90 min
+    INIT: 0.05,        // 4.5 min
+    ENTRAINMENT: 0.10, // 9 min
+    ESCALATION: 0.40,  // 36 min
+    PEAK: 0.35,        // 31.5 min
+    RELEASE: 0.10,     // 9 min
+  },
+};
+
+// Intensity targets per phase
+const PHASE_INTENSITY = {
+  INIT: 0.3,
+  ENTRAINMENT: 0.5,
+  ESCALATION: 0.7,
+  PEAK: 1.0,
+  RELEASE: 0.4,
+};
+
+// Breathing rate per phase (breaths per minute)
+const PHASE_BREATH_RATE = {
+  INIT: 6,
+  ENTRAINMENT: 5,
+  ESCALATION: 4,
+  PEAK: 3,
+  RELEASE: 5,
+};
+
+function updatePhase() {
+  if (!VoidState.running || VoidState.paused) return;
+  
+  const elapsed = Date.now() - VoidState.sessionStart;
+  const duration = VoidState.presetDurations[VoidState.preset];
+  const progress = Math.min(elapsed / duration, 1.0);
+  
+  // Determine current phase based on progress
+  const config = PHASE_CONFIG[VoidState.preset];
+  let accumulated = 0;
+  let newPhaseIndex = 0;
+  let phaseProgress = 0;
+  
+  const phases = ['INIT', 'ENTRAINMENT', 'ESCALATION', 'PEAK', 'RELEASE'];
+  
+  for (let i = 0; i < phases.length; i++) {
+    const phaseEnd = accumulated + config[phases[i]];
+    if (progress < phaseEnd) {
+      newPhaseIndex = i;
+      phaseProgress = (progress - accumulated) / config[phases[i]];
+      break;
+    }
+    accumulated = phaseEnd;
+    newPhaseIndex = i;
+  }
+  
+  // Phase changed?
+  if (newPhaseIndex !== VoidState.phaseIndex) {
+    const oldPhase = VoidState.phaseNames[VoidState.phaseIndex];
+    const newPhase = VoidState.phaseNames[newPhaseIndex];
+    
+    VoidState.phaseIndex = newPhaseIndex;
+    VoidState.phaseProgress = phaseProgress;
+    
+    // Update targets for new phase
+    VoidState.targetIntensity = PHASE_INTENSITY[newPhase];
+    VoidState.breathRate = PHASE_BREATH_RATE[newPhase];
+    
+    VoidEvents.emit('phase:change', {
+      from: oldPhase,
+      to: newPhase,
+      index: newPhaseIndex,
+      progress: phaseProgress,
+    });
+    
+    console.log(`Phase: ${oldPhase} → ${newPhase}`);
+  }
+  
+  VoidState.phaseProgress = phaseProgress;
+  
+  // Check for session end
+  if (progress >= 1.0) {
+    endSession();
+  }
+}
+
+// Update phase every second
+setInterval(updatePhase, 1000);
+
+function startSession() {
+  VoidState.running = true;
+  VoidState.sessionStart = Date.now();
+  VoidState.targetIntensity = 1.0;
+  VoidState.phaseIndex = 0;
+  
+  VoidEvents.emit('session:start', { 
+    preset: VoidState.preset,
+    theme: VoidState.currentTheme 
+  });
+  
+  console.log(`Session started [${VoidState.preset}]`);
+}
+
+function pauseSession() {
+  VoidState.paused = true;
+  VoidEvents.emit('session:pause', {});
+  console.log('Session paused');
+}
+
+function resumeSession() {
+  VoidState.paused = false;
+  VoidEvents.emit('session:resume', {});
+  console.log('Session resumed');
+}
+
+function endSession() {
+  VoidState.running = false;
+  VoidState.sessionDuration = Date.now() - VoidState.sessionStart;
+  VoidEvents.emit('session:end', { 
+    duration: VoidState.sessionDuration 
+  });
+  console.log(`Session ended: ${Math.round(VoidState.sessionDuration/1000)}s`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INPUT HANDLERS - Map controller inputs to actions
+// ═══════════════════════════════════════════════════════════════
+
+// Right trigger = start/intensify
+VoidEvents.on('input:trigger', (data) => {
+  if (data.hand === 'right') {
+    if (!VoidState.running) {
+      startSession();
+    } else {
+      // Boost intensity temporarily
+      VoidState.targetIntensity = Math.min(VoidState.targetIntensity + 0.1, 1.0);
+      console.log(`Intensity → ${VoidState.targetIntensity.toFixed(2)}`);
+    }
+  }
+});
+
+// Left trigger = reduce intensity
+VoidEvents.on('input:trigger', (data) => {
+  if (data.hand === 'left') {
+    VoidState.targetIntensity = Math.max(VoidState.targetIntensity - 0.1, 0.2);
+    console.log(`Intensity → ${VoidState.targetIntensity.toFixed(2)}`);
+  }
+});
+
+// Right grip = pause/resume
+VoidEvents.on('input:grip', (data) => {
+  if (data.hand === 'right' && VoidState.running) {
+    if (VoidState.paused) {
+      resumeSession();
+    } else {
+      pauseSession();
+    }
+  }
+});
+
+// A button = cycle theme
+VoidEvents.on('input:a-button', () => {
+  const themeNames = Object.keys(THEMES);
+  const currentIndex = themeNames.indexOf(VoidState.currentTheme);
+  const nextIndex = (currentIndex + 1) % themeNames.length;
+  VoidState.currentTheme = themeNames[nextIndex];
+  
+  VoidEvents.emit('theme:change', { theme: VoidState.currentTheme });
+  updateAudioForTheme();
+  
+  console.log(`Theme → ${THEMES[VoidState.currentTheme].name}`);
+});
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN INITIALIZATION
+// ═══════════════════════════════════════════════════════════════
+
+const scene = document.getElementById('scene');
+const overlay = document.getElementById('overlay');
+const voidSky = document.getElementById('voidSky');
+
+function startExperience() {
+  overlay.classList.add('hidden');
+  initAudio();
+  startSession();
+}
+
+// VR Button
+document.getElementById('enterVR').addEventListener('click', () => {
+  console.log('Entering VR...');
+  startExperience();
+  scene.enterVR();
+});
+
+// 2D Button  
+document.getElementById('enter2D').addEventListener('click', () => {
+  console.log('Starting 2D mode...');
+  startExperience();
+});
+
+// VR lifecycle events
+scene.addEventListener('enter-vr', () => {
+  VoidState.inVR = true;
+  VoidEvents.emit('vr:enter', {});
+  console.log('VR session active');
+});
+
+scene.addEventListener('exit-vr', () => {
+  VoidState.inVR = false;
+  VoidEvents.emit('vr:exit', {});
+  console.log('Exited VR');
+});
+
+scene.addEventListener('loaded', () => {
+  console.log('A-Frame loaded');
+  
+  // Calibrate user height from camera
+  setTimeout(() => {
+    const cam = document.querySelector('[camera]');
+    if (cam) {
+      const pos = new THREE.Vector3();
+      cam.object3D.getWorldPosition(pos);
+      VoidState.userHeight = pos.y;
+      console.log(`User height: ${pos.y.toFixed(2)}m`);
+    }
+  }, 1000);
+});
+
+// Log state periodically
+setInterval(() => {
+  if (VoidState.running) {
+    const elapsed = Math.round((Date.now() - VoidState.sessionStart) / 1000);
+    console.log(`Session: ${elapsed}s | Phase: ${VoidState.phaseNames[VoidState.phaseIndex]}`);
+  }
+}, 15000);
+
+console.log('[VOID] Ready - Press trigger to start');
+
+// ═══════════════════════════════════════════════════════════════
+// FILE SYSTEM ACCESS API TEST
+// Test if persistent folder access works on this browser
+// ═══════════════════════════════════════════════════════════════
+
+const fsResult = document.getElementById('fsResult');
+
+async function testFileSystemAccess() {
+  fsResult.textContent = 'Testing...';
+  
+  // Check if API exists
+  if (!('showDirectoryPicker' in window)) {
+    fsResult.textContent = '❌ File System Access API not supported';
+    console.log('FSAA not available');
+    return;
+  }
+  
+  try {
+    // Request folder access
+    const dirHandle = await window.showDirectoryPicker({
+      mode: 'read'
+    });
+    
+    console.log('Got folder handle:', dirHandle.name);
+    
+    // Count files
+    let fileCount = 0;
+    let mediaCount = 0;
+    
+    for await (const entry of dirHandle.values()) {
+      fileCount++;
+      if (entry.kind === 'file') {
+        const name = entry.name.toLowerCase();
+        if (name.match(/\.(jpg|jpeg|png|gif|webp|mp4|webm|mov)$/)) {
+          mediaCount++;
+        }
+      }
+    }
+    
+    // Try to store handle for persistence
+    let canPersist = false;
+    try {
+      // Check if we can store in IndexedDB (some browsers support this)
+      const testDb = await new Promise((resolve, reject) => {
+        const req = indexedDB.open('void-fs-test', 1);
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => resolve(req.result);
+        req.onupgradeneeded = () => {
+          req.result.createObjectStore('handles');
+        };
+      });
+      
+      const tx = testDb.transaction('handles', 'readwrite');
+      const store = tx.objectStore('handles');
+      await new Promise((resolve, reject) => {
+        const req = store.put(dirHandle, 'contentFolder');
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+      
+      canPersist = true;
+      console.log('Handle stored successfully!');
+      testDb.close();
+    } catch (e) {
+      console.log('Cannot persist handle:', e);
+    }
+    
+    fsResult.innerHTML = `✅ Access granted!<br>
+      📁 ${dirHandle.name}<br>
+      📄 ${fileCount} items, ${mediaCount} media<br>
+      💾 Persist: ${canPersist ? 'YES!' : 'No'}`;
+    
+    console.log(`FSAA Test: ${fileCount} items, ${mediaCount} media, persist=${canPersist}`);
+    
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      fsResult.textContent = 'Cancelled';
+    } else {
+      fsResult.textContent = `❌ Error: ${e.message}`;
+      console.error('FSAA error:', e);
+    }
+  }
+}
+
+document.getElementById('testFS').addEventListener('click', testFileSystemAccess);
+</script>
+</body>
+</html>
