@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>VR Test - Simple</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+</head>
+<body>
+<a-scene>
+  <!-- Simple colored boxes around the viewer -->
+  <a-box position="-1 0.5 -3" rotation="0 45 0" color="#ff2d7b"></a-box>
+  <a-box position="1 0.5 -3" rotation="0 45 0" color="#00f0ff"></a-box>
+  <a-box position="0 2 -3" rotation="0 45 0" color="#7b2dff"></a-box>
+  
+  <!-- A sphere behind -->
+  <a-sphere position="0 1 -5" radius="1" color="#ff7b2d"></a-sphere>
+  
+  <!-- Ground -->
+  <a-plane position="0 0 -4" rotation="-90 0 0" width="10" height="10" color="#1a1a2e"></a-plane>
+  
+  <!-- Sky -->
+  <a-sky color="#0a0a1a"></a-sky>
+</a-scene>
+</body>
+</html>
