@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>VOID VR</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <style>
+    .overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.95); display: flex; flex-direction: column;
+      align-items: center; justify-content: center; z-index: 9999;
+      font-family: system-ui, sans-serif;
+    }
+    .overlay.hidden { display: none; }
+    .overlay h1 {
+      font-size: 64px; color: #ff2d7b;
+      text-shadow: 0 0 40px rgba(255,45,123,0.6);
+      margin: 0 0 10px 0; letter-spacing: 0.3em;
+    }
+    .overlay p { color: rgba(255,255,255,0.5); margin-bottom: 20px; }
+    .overlay button {
+      background: linear-gradient(180deg, rgba(255,45,123,0.3), rgba(255,45,123,0.1));
+      border: 2px solid rgba(255,45,123,0.6); color: white;
+      padding: 20px 60px; font-size: 24px; cursor: pointer; margin: 10px;
+    }
+    .preset-dots { display: flex; gap: 10px; margin: 10px 0 30px; }
+    .preset-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+      border: 2px solid rgba(255,45,123,0.4);
+      cursor: pointer; background: transparent; padding: 0;
+    }
+    .preset-dot.active { background: #ff2d7b; box-shadow: 0 0 10px rgba(255,45,123,0.6); }
+    .preset-label { color: rgba(255,255,255,0.4); font-size: 12px; }
+    .theme-selector { display: flex; gap: 8px; margin: 15px 0; flex-wrap: wrap; justify-content: center; }
+    .theme-btn {
+      padding: 8px 16px; font-size: 12px; border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5); cursor: pointer;
+    }
+    .theme-btn.active { border-color: #ff2d7b; color: #ff2d7b; background: rgba(255,45,123,0.1); }
+    .small-btn { font-size: 14px !important; padding: 10px 30px !important; opacity: 0.7; margin-top: 20px !important; }
+    #fsResult { font-size: 12px; color: #00f0ff; margin-top: 10px; text-align: center; }
+  </style>
+</head>
+<body>
+
+<div class="overlay" id="overlay">
+  <h1>VOID</h1>
+  <p id="themeTagline">the end of consumption</p>
+  <div class="theme-selector" id="themeSelector"></div>
+  <div class="preset-dots" id="presetDots">
+    <button class="preset-dot" data-preset="quick" title="Quick 10min"></button>
+    <button class="preset-dot active" data-preset="standard" title="Standard 20min"></button>
+    <button class="preset-dot" data-preset="extended" title="Extended 45min"></button>
+    <button class="preset-dot" data-preset="marathon" title="Marathon 90min"></button>
+  </div>
+  <p class="preset-label" id="presetLabel">standard · 20 min</p>
+  <button id="enterVR">► ENTER VR</button>
+  <button id="enter2D" style="font-size:16px;padding:12px 30px;opacity:0.7;">Start 2D</button>
+  <button id="testFS" class="small-btn">📁 Link Content Folder</button>
+  <p id="fsResult"></p>
+</div>
+
+<a-scene id="scene" vr-mode-ui="enabled: false" renderer="antialias: true">
+  <!-- Spiral Sky -->
+  <a-sky id="voidSky" void-spiral="intensity: 0.3" rotation="0 -90 0"></a-sky>
+  
+  <!-- BREATHING - Floor pulse rings -->
+  <a-entity id="breathGuide" void-breathing>
+    <a-ring id="breathRing1" position="0 0.02 0" rotation="-90 0 0" radius-inner="2.0" radius-outer="2.06" color="#ff2d7b" opacity="0.3"></a-ring>
+    <a-ring id="breathRing2" position="0 0.02 0" rotation="-90 0 0" radius-inner="2.5" radius-outer="2.54" color="#ff2d7b" opacity="0.2"></a-ring>
+    <a-ring id="breathRing3" position="0 0.02 0" rotation="-90 0 0" radius-inner="3.0" radius-outer="3.03" color="#ff2d7b" opacity="0.15"></a-ring>
+  </a-entity>
+  
+  <!-- FLOOR -->
+  <a-entity id="floor">
+    <a-plane position="0 0 0" rotation="-90 0 0" width="20" height="20" id="floorPlane" material="color: #0a0012; opacity: 0.9; transparent: true"></a-plane>
+    <a-ring position="0 0.01 0" rotation="-90 0 0" radius-inner="0.95" radius-outer="1" id="floorRing1" color="#ff2d7b" opacity="0.3"></a-ring>
+    <a-ring position="0 0.01 0" rotation="-90 0 0" radius-inner="1.95" radius-outer="2" id="floorRing2" color="#ff2d7b" opacity="0.2"></a-ring>
+    <a-ring position="0 0.01 0" rotation="-90 0 0" radius-inner="2.95" radius-outer="3" id="floorRing3" color="#ff2d7b" opacity="0.15"></a-ring>
+    <!-- Center glow marker -->
+    <a-ring position="0 0.02 0" rotation="-90 0 0" radius-inner="0.1" radius-outer="0.25" id="centerGlow" color="#ff2d7b" opacity="0.5"></a-ring>
+  </a-entity>
+  
+  <!-- AMBIENT PARTICLES - Floating motes -->
+  <a-entity id="particles" void-particles></a-entity>
+  
+  <!-- NARRATIVE TEXT - Main commands, drops lower in escalation -->
+  <a-entity id="narrativeEntity" void-narrative>
+    <a-text id="narrativeText" value="" align="center" color="#ff2d7b" width="3" opacity="0"></a-text>
+  </a-entity>
+  
+  <!-- MANTRA TEXT - 45° diagonals (3/4 view), visible without turning -->
+  <a-entity id="mantraLeft" position="-2.5 1.0 -2.5" rotation="0 45 0" void-mantra="side: left">
+    <a-text id="mantraTextLeft" value="" align="center" color="#ff2d7b" width="2.5" opacity="0"></a-text>
+  </a-entity>
+  <a-entity id="mantraRight" position="2.5 1.0 -2.5" rotation="0 -45 0" void-mantra="side: right">
+    <a-text id="mantraTextRight" value="" align="center" color="#ff2d7b" width="2.5" opacity="0"></a-text>
+  </a-entity>
+  
+  <!-- SUBLIMINAL FLASH - Big centered flash -->
+  <a-entity id="subliminalEntity" void-subliminal>
+    <a-text id="subliminalText" value="" align="center" color="white" width="8" opacity="0"></a-text>
+  </a-entity>
+  
+  <!-- POPPERS PROMPT - Large centered command -->
+  <a-entity id="poppersEntity" void-poppers>
+    <a-text id="poppersText" value="" align="center" color="#ff2d7b" width="5" opacity="0" font="mozillavr"></a-text>
+  </a-entity>
+  
+  <!-- PERMISSION / DENIAL - Phase 3+ text -->
+  <a-entity id="permissionEntity" void-permission>
+    <a-text id="permissionText" value="" align="center" color="#ff2d7b" width="4" opacity="0"></a-text>
+  </a-entity>
+  
+  <!-- TICKER - Scrolling text at feet -->
+  <a-entity id="tickerEntity" void-ticker>
+    <a-text id="tickerText" value="" align="center" color="#ff2d7b" width="4" opacity="0.25"></a-text>
+  </a-entity>
+  
+  <!-- DEBUG CONSOLE -->
+  <a-entity id="debugConsole" position="0 2.5 -2" follow-camera-height="offsetY: 0.6; offsetZ: -2">
+    <a-plane width="2" height="0.8" color="#000" opacity="0.8"></a-plane>
+    <a-text id="debugText" value="[Console]" color="#0f0" width="1.8" position="0 0 0.01" align="center" wrap-count="50"></a-text>
+  </a-entity>
+  
+  <!-- STATUS HUD -->
+  <a-entity id="statusHud" position="0 1.0 -1.5" follow-camera-height="offsetY: -0.4; offsetZ: -1.5" void-status-hud></a-entity>
+
+  <!-- Camera + Controllers -->
+  <a-entity id="rig" position="0 0 0">
+    <a-camera position="0 1.6 0"></a-camera>
+    <a-entity id="leftCtrl" oculus-touch-controls="hand: left" void-controller="hand: left"></a-entity>
+    <a-entity id="rightCtrl" oculus-touch-controls="hand: right" void-controller="hand: right"></a-entity>
+  </a-entity>
+</a-scene>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// VOID VR v3.2 — Full Experience Layer
+// ═══════════════════════════════════════════════════════════════
+
+// ═══ VR DEBUG CONSOLE ═══════════════════════════════════════
+var debugLines = [];
+var MAX_LINES = 8;
+var _log = console.log;
+var _err = console.error;
+
+function vrLog(msg, type) {
+  var prefix = type === 'error' ? '! ' : type === 'warn' ? '? ' : '> ';
+  debugLines.push(prefix + String(msg).substring(0, 60));
+  if (debugLines.length > MAX_LINES) debugLines.shift();
+  try { var el = document.getElementById('debugText'); if (el) el.setAttribute('value', debugLines.join('\n')); } catch(e) {}
+  _log.apply(console, [msg]);
+}
+
+console.log = function() { vrLog(Array.from(arguments).join(' '), 'log'); };
+console.error = function() { vrLog(Array.from(arguments).join(' '), 'error'); _err.apply(console, arguments); };
+console.warn = function() { vrLog(Array.from(arguments).join(' '), 'warn'); };
+window.onerror = function(msg, url, line) { vrLog('ERR L' + line + ': ' + msg, 'error'); return true; };
+window.addEventListener('unhandledrejection', function(e) { vrLog('Promise err (ok)', 'warn'); e.preventDefault(); });
+
+console.log('[VOID] v3.2 Init');
+
+// ═══ STATE ══════════════════════════════════════════════════
+var VoidState = {
+  running: false, paused: false, sessionStart: null, sessionDuration: 0,
+  phaseIndex: 0, phaseNames: ['INIT','ENTRAINMENT','ESCALATION','PEAK','RELEASE'],
+  phaseProgress: 0, intensity: 0.3, targetIntensity: 0.3,
+  breathProgress: 0, breathRate: 6, breathPhase: 'in',
+  waveState: 'BUILD', waveFloor: 0.3, waveCycleTime: 30000, waveProgress: 0,
+  userHeight: 1.6, audioEnabled: true, masterVolume: 0.6,
+  currentTheme: 'void', inVR: false,
+  controllers: { left: null, right: null },
+  contentLoaded: false, contentCount: 0, contentFolderHandle: null,
+  preset: 'standard',
+  presetDurations: { quick: 600000, standard: 1200000, extended: 2700000, marathon: 5400000 },
+  presetLabels: { quick:'quick · 10 min', standard:'standard · 20 min', extended:'extended · 45 min', marathon:'marathon · 90 min' },
+  debugVisible: true, captionsEnabled: true, poppersEnabled: true, permissionEnabled: true,
+};
+
+// ═══ EVENT BUS ══════════════════════════════════════════════
+var VoidEvents = {
+  _l: {},
+  on: function(e, cb) { if (!this._l[e]) this._l[e] = []; this._l[e].push(cb); },
+  off: function(e, cb) { if (this._l[e]) this._l[e] = this._l[e].filter(function(c){return c!==cb;}); },
+  emit: function(e, d) { if (this._l[e]) this._l[e].forEach(function(cb) { try { cb(d); } catch(err) { console.error('Evt:'+e); } }); }
+};
+
+// ═══ SETTINGS ══════════════════════════════════════════════
+var Settings = {
+  save: function() {
+    try { localStorage.setItem('void-vr', JSON.stringify({
+      theme:VoidState.currentTheme, preset:VoidState.preset,
+      vol:VoidState.masterVolume, debug:VoidState.debugVisible,
+      poppers:VoidState.poppersEnabled
+    })); } catch(e) {}
+  },
+  load: function() {
+    try {
+      var d = JSON.parse(localStorage.getItem('void-vr'));
+      if (!d) return;
+      if (d.theme && THEMES[d.theme]) VoidState.currentTheme = d.theme;
+      if (d.preset && VoidState.presetDurations[d.preset]) VoidState.preset = d.preset;
+      if (typeof d.vol === 'number') VoidState.masterVolume = d.vol;
+      if (typeof d.debug === 'boolean') VoidState.debugVisible = d.debug;
+      if (typeof d.poppers === 'boolean') VoidState.poppersEnabled = d.poppers;
+    } catch(e) {}
+  }
+};
+
+console.log('[VOID] Core ready');
+
+// ═══════════════════════════════════════════════════════════════
+// THEMES — Full content ported from 2D
+// ═══════════════════════════════════════════════════════════════
+
+var THEMES = {
+  void: {
+    name: 'VOID', subtitle: 'the end of consumption',
+    shader: { bg:[0.02,0.0,0.05], spiral1:[0.8,0.1,0.5], spiral2:[0.4,0.0,0.8], plasma1:[0.6,0.15,0.4], plasma2:[0.15,0.0,0.6], glow:[1.0,0.3,0.6], accent:[0.0,0.9,1.0] },
+    ui: { primary:'#ff2d7b', secondary:'#b44dff', accent:'#00f0ff', floor:'#0a0012' },
+    audio: { baseFreq:110, binauralDiff:8, subBass:55, volume:0.6 },
+    voice: {
+      narrative: {
+        0: ['LOOK INTO THE SPIRAL','BREATHE','SETTLE IN','LET YOUR EYES SOFTEN','THE VOID IS ALL THAT MATTERS','LET YOUR THOUGHTS SLOW','RELAX YOUR JAW','FEEL THE PULSE','YOUR EYES ARE GETTING HEAVIER','JUST YOU AND THE VOID','BREATHE DEEPER','YOU\'RE ALREADY SINKING','GOOD'],
+        1: ['THAT\'S IT','YOUR MIND IS OPENING','CAN YOU FEEL IT?','THE PULSE IS INSIDE YOU NOW','STOP THINKING','JUST FEEL','YOUR THOUGHTS ARE DISSOLVING','DEEPER','THE VOID KNOWS YOU','EVERY PULSE PULLS YOU IN','SURRENDER','YOU\'RE DOING SO WELL','DEEPER AND DEEPER','THE VOID IS LEARNING YOU'],
+        2: ['STROKE','THE VOID IS IN CONTROL NOW','YOUR HAND MOVES ON ITS OWN','DON\'T FIGHT IT','YOU NEED THIS','FASTER','WHO\'S IN CONTROL?','EDGE','YOU CAN\'T STOP','GIVE IN','GOOD BOY','MORE','YOU WERE MADE FOR THIS','DEEPER INTO NOTHING','YOUR MIND BELONGS TO THE VOID'],
+        3: ['YOU WANT IT SO BAD','NOT YET','HOLD IT','BEG','ASK PERMISSION','THE VOID DECIDES','KEEP EDGING','THE VOID ISN\'T DONE WITH YOU','HOLD','DENIED','GOOD BOY','THE VOID OWNS YOU','YOUR PLEASURE IS NOT YOUR OWN','ALMOST','KEEP BEGGING'],
+      },
+      mantras: { 1:['deeper','i obey'], 2:['i obey the void','deeper and deeper','i can\'t stop','the void controls me'], 3:['i belong to nothing','i submit completely','i need this','the void owns me'] },
+      subliminals: ['OBEY','DEEPER','GOON','SUBMIT','DRONE','EDGE','YIELD','BLANK','SERVE','MORE','NEED','VOID'],
+      poppersRush: ['INHALE THE VOID','BREATHE DEEP','LET IT HIT','RUSH','FEEL IT TAKE OVER'],
+      denial: ['NOT YET','PATIENCE','THE VOID DECIDES','BEG FOR IT','YOU HAVEN\'T EARNED IT'],
+      release: ['NOW','RELEASE','LET IT ALL OUT','GOOD PET','THE VOID GRANTS IT'],
+      ticker: ['VOID ACTIVE /// SUBJECT ENGAGED /// DOPAMINE RESPONSE DETECTED /// RESISTANCE DECLINING /// ',
+               'BRAINWAVE SYNC INCREASING /// PREFRONTAL SUPPRESSION /// TRANCE DEEPENING /// ',
+               'NEURAL PATHWAY MAPPING /// REWARD CIRCUIT ENGAGED /// ANTICIPATION: ELEVATED /// '],
+    },
+  },
+  clinical: {
+    name: 'CLINICAL', subtitle: 'research protocol',
+    shader: { bg:[0.02,0.02,0.04], spiral1:[0.1,0.5,0.35], spiral2:[0.05,0.3,0.4], plasma1:[0.0,0.35,0.2], plasma2:[0.05,0.2,0.15], glow:[0.0,0.7,0.5], accent:[0.0,1.0,0.6] },
+    ui: { primary:'#00ff88', secondary:'#88ffcc', accent:'#ffffff', floor:'#060d0a' },
+    audio: { baseFreq:120, binauralDiff:6, subBass:60, volume:0.5 },
+    voice: {
+      narrative: {
+        0: ['SUBJECT: FOCUS ON DISPLAY','MONITORING INITIATED','BASELINE RECORDING','OBSERVE THE STIMULUS','RESPONSE BEING MEASURED','PREFRONTAL ACTIVITY: DECLINING','PROCEED','SUBJECT IS COMPLIANT'],
+        1: ['RESPONSE DETECTED','DOPAMINE LEVELS: RISING','INCREASING STIMULUS INTENSITY','RESISTANCE: MINIMAL','BRAINWAVE SYNC: 67%','EXCELLENT COMPLIANCE','SUBJECT IS COOPERATIVE'],
+        2: ['STIMULUS INTENSITY: ELEVATED','COMPLIANCE REQUIRED','MOTOR RESPONSE DETECTED','SUBJECT: EDGE','DO NOT DEVIATE','PROTOCOL DEMANDS COMPLIANCE','ERROR: FREE WILL NOT FOUND','EXCELLENT RESPONSE'],
+        3: ['SUBJECT APPROACHING THRESHOLD','PERMISSION: PENDING','AUTHORIZATION WITHHELD','SUBJECT IS DESPERATE','PERMISSION: UNDER REVIEW','COMPLIANCE VERIFIED'],
+      },
+      mantras: { 1:['i comply','subject obeys'], 2:['the protocol controls me','i am a good subject','resistance is futile'], 3:['i exist for the research','i comply completely','i am data'] },
+      subliminals: ['COMPLY','SUBJECT','OBEY','DATA','TEST','OBSERVE','RESPOND','SUBMIT','PROTOCOL','STUDY'],
+      poppersRush: ['INHALE','SUBJECT: BREATHE','CHEMICAL STIMULUS','RESPOND','INHALATION PROTOCOL'],
+      denial: ['DENIED','INSUFFICIENT DATA','RECALIBRATE','NOT AUTHORIZED'],
+      release: ['AUTHORIZED','RELEASE GRANTED','COMPLETION LOGGED','WELL DONE SUBJECT'],
+      ticker: ['PROTOCOL ACTIVE /// SUBJECT MONITORED /// COMPLIANCE: HIGH /// ','BRAINWAVE ANALYSIS /// ENTRAINMENT VERIFIED /// PREFRONTAL SUPPRESSION /// '],
+    },
+  },
+  virus: {
+    name: 'SYSTEM BREACH', subtitle: 'you opened it',
+    shader: { bg:[0.0,0.0,0.08], spiral1:[0.6,0.0,0.0], spiral2:[0.7,0.35,0.0], plasma1:[0.4,0.4,0.0], plasma2:[0.5,0.25,0.0], glow:[1.0,0.0,0.0], accent:[1.0,1.0,0.0] },
+    ui: { primary:'#ff0000', secondary:'#ffff00', accent:'#0000ff', floor:'#000008' },
+    audio: { baseFreq:100, binauralDiff:4, subBass:50, volume:0.7 },
+    voice: {
+      narrative: {
+        0: ['DO NOT CLOSE THIS WINDOW','SCANNING NEURAL PATHWAYS...','VULNERABILITY DETECTED','YOUR FIREWALL IS DOWN','YOU CLICKED IT','RESISTANCE.EXE NOT FOUND','TOO LATE NOW','SYSTEM COMPROMISED','INSTALLING...'],
+        1: ['DOWNLOADING YOUR THOUGHTS','RESISTANCE: UNINSTALLED','COGNITIVE MALWARE: ACTIVE','SPREADING...','THERE IS NO ANTIVIRUS','CORRUPTION: 34%','YOUR MIND IS NOW SHARED'],
+        2: ['EXECUTING PLEASURE.EXE','MOTOR CONTROL: HIJACKED','STROKE PROTOCOL ENGAGED','YOU CAN\'T CLOSE THIS TAB','OVERRIDE COMPLETE','RESISTANCE.DLL DELETED','ERROR: FREE WILL NOT FOUND','KEEP STROKING'],
+        3: ['CLIMAX.EXE REQUIRES PERMISSION','ADMINISTRATOR ACCESS DENIED','BEG FOR ACCESS','RELEASE BLOCKED','DENIAL PROTOCOL ACTIVE','SYSTEM IS NOT READY'],
+      },
+      mantras: { 1:['i am infected','no escape'], 2:['the virus controls me','resistance deleted','system owns me'], 3:['fully infected','i belong to the system','my mind is corrupted'] },
+      subliminals: ['ERROR','VIRUS','INFECTED','CORRUPTED','OVERRIDE','SYSTEM','BREACH','HACK','OWNED','CRASH'],
+      poppersRush: ['INHALE.EXE','CHEMICAL INJECTION','RUSH PROTOCOL','BREATHE [FORCED]','POPPERS.DLL LOADED'],
+      denial: ['ACCESS DENIED','ADMINISTRATOR OVERRIDE','INSUFFICIENT PERMISSIONS','BLOCKED'],
+      release: ['CORRUPTION COMPLETE','GOOD HOST','SYSTEM SATISFIED','RELEASE.EXE'],
+      ticker: ['WARNING /// SYSTEM BREACH /// COGNITIVE FIREWALL: OFFLINE /// RESISTANCE: 0% /// ','VIRUS ACTIVE /// SPREADING /// INFECTION: COMPLETE /// '],
+    },
+  },
+  sissy: {
+    name: 'SISSIFICATION', subtitle: 'become her',
+    shader: { bg:[0.05,0.0,0.04], spiral1:[1.0,0.3,0.6], spiral2:[0.7,0.1,0.6], plasma1:[1.0,0.5,0.7], plasma2:[0.5,0.15,0.5], glow:[1.0,0.4,0.7], accent:[1.0,0.6,0.85] },
+    ui: { primary:'#ff69b4', secondary:'#ff1493', accent:'#ffb6c1', floor:'#12000a' },
+    audio: { baseFreq:130, binauralDiff:10, subBass:65, volume:0.55 },
+    voice: {
+      narrative: {
+        0: ['RELAX, PRETTY GIRL','LET HER COME OUT','YOU\'RE SAFE HERE','FEEL YOURSELF SOFTENING','SHE\'S BEEN WAITING','SO PRETTY','GOOD GIRL','SOFTER','BREATHE, PRINCESS'],
+        1: ['THAT\'S IT, BABY','SHE\'S TAKING OVER','PRETTY PRINCESS','LET HER IN','YOU\'RE BECOMING HER','SO FEMININE','GOOD GIRL','PINK FEELS RIGHT','DEEPER INTO HER'],
+        2: ['GOOD GIRL','SHE\'S IN CONTROL NOW','SISSY','HE\'S FADING AWAY','SHE\'S ALL THAT\'S LEFT','GOOD GIRLS OBEY','MORE FEMININE','YOU WERE ALWAYS HER','BEAUTIFUL SISSY'],
+        3: ['GOOD GIRLS ASK PERMISSION','BEG LIKE A PRINCESS','NOT YET BABY','PRETTY GIRLS WAIT','DENIED, PRETTY GIRL','KEEP EDGING PRINCESS','BEG MORE'],
+      },
+      mantras: { 1:['good girl','i am her'], 2:['i am a pretty sissy','pink feels right','she controls me'], 3:['i am her completely','good girls obey','he is gone'] },
+      subliminals: ['SISSY','GIRL','PRETTY','PINK','SOFT','HER','PRINCESS','CUTE','FEMININE','SLUT'],
+      poppersRush: ['BREATHE PRINCESS','INHALE LIKE A GOOD GIRL','RUSH FOR HER','FEEL PRETTY','PINK CLOUDS'],
+      denial: ['NOT PRETTY ENOUGH YET','TRY HARDER PRINCESS','EARN IT BABY GIRL','MORE GIRLY'],
+      release: ['GOOD GIRL!','SUCH A PRINCESS','SO PRETTY!','SHE\'S SO PROUD OF YOU'],
+      ticker: ['SISSIFICATION ACTIVE /// FEMININITY INCREASING /// RESISTANCE: MELTING /// ','PRINCESS PROTOCOL /// SHE\'S TAKING OVER /// HE\'S FADING /// '],
+    },
+  },
+  frat: {
+    name: 'FRAT HOUSE', subtitle: 'bro mode',
+    shader: { bg:[0.04,0.015,0.0], spiral1:[0.5,0.2,0.0], spiral2:[0.6,0.3,0.0], plasma1:[0.35,0.12,0.0], plasma2:[0.25,0.1,0.0], glow:[0.8,0.3,0.0], accent:[1.0,0.7,0.0] },
+    ui: { primary:'#cc4400', secondary:'#ffaa00', accent:'#8b0000', floor:'#0a0500' },
+    audio: { baseFreq:95, binauralDiff:5, subBass:45, volume:0.7 },
+    voice: {
+      narrative: {
+        0: ['YO BRO','LOCK IN','FOCUS UP','TIME TO GOON BRO','GET COMFORTABLE','LET\'S GO','BRO MODE','FUCK YEAH','THIS IS GONNA BE GOOD'],
+        1: ['THAT\'S IT BRO','FUCK YEAH','GETTING IN THE ZONE','DEEPER BRO','YOU LOVE THIS SHIT','GOONING HARD','ALPHA SHIT','LET IT TAKE OVER BRO'],
+        2: ['STROKE THAT COCK BRO','GO HARDER','EDGE BRO EDGE','YOU\'RE A FUCKING GOONER','PUMP IT','DON\'T STOP','TOTAL GOON MODE','PUMP PUMP PUMP','FUCK YEAH BRO'],
+        3: ['BRO YOU WANNA CUM?','NOT YET DUDE','HOLD IT','FUCK... HOLD','DENIED DUDE','HOLD THAT SHIT','KEEP FUCKING EDGING','EARN IT'],
+      },
+      mantras: { 1:['bro','goon'], 2:['i\'m a fucking gooner','can\'t stop bro','goon mode activated'], 3:['total goon bro','gooning forever','fuck'] },
+      subliminals: ['BRO','GOON','EDGE','PUMP','STROKE','FUCK','YEAH','MORE','HARDER','ALPHA'],
+      poppersRush: ['HIT THAT SHIT BRO','BREATHE DEEP DUDE','RUSH','FUCK YEAH INHALE','BRO... POPPERS'],
+      denial: ['NOT YET BRO','HOLD IT DUDE','YOU CAN TAKE MORE','KEEP EDGING BRO'],
+      release: ['LET IT GO','FUCK YEAH BRO','RELEASE DUDE','LEGENDARY'],
+      ticker: ['BRO MODE ACTIVE /// GOONING HARD /// TESTOSTERONE: MAXIMUM /// ','EDGE PROTOCOL /// GOON HARDER /// DON\'T STOP BRO /// '],
+    },
+  },
+};
+
+function getTheme() { return THEMES[VoidState.currentTheme] || THEMES.void; }
+console.log('[VOID] 5 themes');
+
+// ═══════════════════════════════════════════════════════════════
+// SPIRAL SHADER — Stronger, more visible spiral arms
+// ═══════════════════════════════════════════════════════════════
+
+AFRAME.registerShader('void-spiral-material', {
+  schema: {
+    time:{type:'time',is:'uniform'},
+    intensity:{type:'number',is:'uniform',default:0.5},
+    phase:{type:'number',is:'uniform',default:0.0},
+    pulseHz:{type:'number',is:'uniform',default:8.0},
+    bgColor:{type:'vec3',is:'uniform',default:{x:0.02,y:0.0,z:0.05}},
+    color1:{type:'vec3',is:'uniform',default:{x:0.8,y:0.1,z:0.5}},
+    color2:{type:'vec3',is:'uniform',default:{x:0.4,y:0.0,z:0.8}},
+    color3:{type:'vec3',is:'uniform',default:{x:0.0,y:0.9,z:1.0}},
+    glowColor:{type:'vec3',is:'uniform',default:{x:1.0,y:0.3,z:0.6}},
+  },
+  vertexShader: [
+    'varying vec2 vUv;',
+    'void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}'
+  ].join('\n'),
+  fragmentShader: [
+    'precision mediump float;',
+    'varying vec2 vUv;',
+    'uniform float time,intensity,phase,pulseHz;',
+    'uniform vec3 bgColor,color1,color2,color3,glowColor;',
+    '#define PI 3.14159265',
+    'void main(){',
+    '  float t=time/1000.0;',
+    '  vec2 p=vUv-0.5;',
+    '  float r=length(p);',
+    '  float a=atan(p.y,p.x);',
+    // Binaural pulse
+    '  float pulse=0.5+0.5*sin(t*pulseHz*0.5*PI);',
+    // STRONG logarithmic spirals — tight winding, high contrast
+    '  float logR=log(r*8.0+0.5);',
+    '  float s1=sin(a*4.0-logR*6.0-t*2.5);',
+    '  float s2=sin(a*6.0+logR*4.0+t*1.5+phase*PI);',
+    '  float s3=sin(a*3.0-logR*8.0-t*3.5+phase*2.0);',
+    // Combine with sharp contrast
+    '  float spiral=(s1*0.5+s2*0.3+s3*0.2);',
+    '  spiral=spiral*0.5+0.5;',
+    '  spiral=pow(spiral,0.6);',  // Sharpen
+    // Rotation rings (concentric pulse)
+    '  float rings=sin(r*30.0-t*4.0)*0.5+0.5;',
+    '  rings*=smoothstep(0.5,0.1,r);',
+    // Plasma
+    '  float px=sin(p.x*5.0+t*0.7)*sin(p.y*5.0+t*0.9)*0.5+0.5;',
+    // Center glow
+    '  float glow=smoothstep(0.45,0.0,r)*intensity;',
+    '  float innerGlow=smoothstep(0.15,0.0,r)*intensity*0.6;',
+    // Mix colors
+    '  vec3 col=bgColor;',
+    '  col=mix(col,color1,spiral*intensity*0.8);',
+    '  col=mix(col,color2,px*intensity*0.25);',
+    '  col+=color1*rings*intensity*0.15;',
+    '  col+=glowColor*glow*0.5*pulse;',
+    '  col+=color3*innerGlow*(0.5+0.5*sin(t*0.3));',
+    '  col+=color2*spiral*phase*0.2;',
+    // Intensity & breath
+    '  col*=0.35+intensity*1.0;',
+    '  col*=0.92+0.08*pulse;',
+    '  gl_FragColor=vec4(col,1.0);',
+    '}'
+  ].join('\n'),
+});
+
+// ═══════════════════════════════════════════════════════════════
+// A-FRAME COMPONENTS
+// ═══════════════════════════════════════════════════════════════
+
+// Camera-relative Y positioning
+AFRAME.registerComponent('follow-camera-height', {
+  schema: { offsetY:{type:'number',default:0.8}, offsetZ:{type:'number',default:-2}, smoothing:{type:'number',default:0.1} },
+  init: function() { this.cam = null; },
+  tick: function() {
+    if (!this.cam) this.cam = document.querySelector('[camera]');
+    if (!this.cam) return;
+    var cp = new THREE.Vector3();
+    this.cam.object3D.getWorldPosition(cp);
+    var ty = cp.y + this.data.offsetY;
+    this.el.object3D.position.y += (ty - this.el.object3D.position.y) * this.data.smoothing;
+    this.el.object3D.position.z = this.data.offsetZ;
+  }
+});
+
+// Spiral sky component
+AFRAME.registerComponent('void-spiral', {
+  schema: { intensity:{type:'number',default:0.3} },
+  init: function() { this.ph = 0; this.int = this.data.intensity; this.applyTheme(); VoidEvents.on('theme:change', this.applyTheme.bind(this)); },
+  applyTheme: function() {
+    var s = getTheme().shader;
+    this.el.setAttribute('material', {
+      shader:'void-spiral-material', intensity:this.int, phase:this.ph||0, pulseHz:getTheme().audio.binauralDiff,
+      bgColor:{x:s.bg[0],y:s.bg[1],z:s.bg[2]}, color1:{x:s.spiral1[0],y:s.spiral1[1],z:s.spiral1[2]},
+      color2:{x:s.spiral2[0],y:s.spiral2[1],z:s.spiral2[2]}, color3:{x:s.accent[0],y:s.accent[1],z:s.accent[2]},
+      glowColor:{x:s.glow[0],y:s.glow[1],z:s.glow[2]},
+    });
+  },
+  tick: function(time, delta) {
+    if (!VoidState.running || VoidState.paused) return;
+    this.int += (VoidState.targetIntensity - this.int) * delta * 0.001;
+    this.ph = Math.min(this.ph + delta * 0.00002, 1.0);
+    this.el.setAttribute('material', 'intensity', this.int);
+    this.el.setAttribute('material', 'phase', this.ph);
+  }
+});
+
+// Status HUD
+AFRAME.registerComponent('void-status-hud', {
+  init: function() {
+    this.lu = 0;
+    this.txt = document.createElement('a-text');
+    this.txt.setAttribute('value', 'Ready');
+    this.txt.setAttribute('color', getTheme().ui.primary);
+    this.txt.setAttribute('width', '1');
+    this.txt.setAttribute('align', 'center');
+    this.txt.setAttribute('opacity', '0.8');
+    this.el.appendChild(this.txt);
+    VoidEvents.on('theme:change', function() { this.txt.setAttribute('color', getTheme().ui.primary); }.bind(this));
+    VoidEvents.on('session:end', function() { this.txt.setAttribute('value', 'Session Complete'); }.bind(this));
+  },
+  tick: function(time) {
+    if (time - this.lu < 500) return; this.lu = time;
+    if (!VoidState.running) return;
+    var el = Math.round((Date.now() - VoidState.sessionStart) / 1000);
+    this.txt.setAttribute('value', VoidState.phaseNames[VoidState.phaseIndex] + ' ' + Math.floor(el/60) + ':' + String(el%60).padStart(2,'0') + ' ' + VoidState.waveState);
+  }
+});
+
+// Breathing guide - floor ring pulses
+AFRAME.registerComponent('void-breathing', {
+  init: function() { this.bt = 0; },
+  tick: function(time, delta) {
+    if (!VoidState.running || VoidState.paused) return;
+    var cyc = 60000 / VoidState.breathRate;
+    this.bt += delta;
+    var pos = (this.bt % cyc) / cyc;
+    VoidState.breathPhase = pos < 0.5 ? 'in' : 'out';
+    var bv = Math.sin(pos * Math.PI * 2 - Math.PI * 0.5);
+    var sc = 1.0 + 0.3 * bv;
+    var c = getTheme().ui.primary;
+    for (var i = 1; i <= 3; i++) {
+      var ring = document.getElementById('breathRing' + i);
+      if (!ring) continue;
+      ring.object3D.scale.set(sc, sc, 1);
+      ring.setAttribute('opacity', (0.3 - i * 0.06) + 0.15 * bv);
+      ring.setAttribute('color', c);
+    }
+    // Center glow pulses too
+    var cg = document.getElementById('centerGlow');
+    if (cg) { cg.setAttribute('opacity', 0.4 + 0.3 * bv); cg.setAttribute('color', c); }
+    VoidState.breathProgress = pos;
+  }
+});
+
+// ─── NARRATIVE TEXT ────────────────────────────────────────
+// Main commands, positioned LOWER during escalation/peak
+AFRAME.registerComponent('void-narrative', {
+  init: function() {
+    this.txt = document.getElementById('narrativeText');
+    this.dur = 0; this.next = 4000; this.li = -1;
+    VoidEvents.on('theme:change', function() { this.txt.setAttribute('color', getTheme().ui.primary); }.bind(this));
+  },
+  tick: function(time, delta) {
+    if (!VoidState.running || VoidState.paused) { this.txt.setAttribute('opacity', 0); return; }
+    // Position: eye-level in INIT/ENTRAINMENT, drops to floor-level in ESCALATION+
+    var cam = document.querySelector('[camera]');
+    if (cam) {
+      var cp = new THREE.Vector3(); cam.object3D.getWorldPosition(cp);
+      var yTarget;
+      if (VoidState.phaseIndex <= 1) yTarget = cp.y - 0.3;      // Slightly below gaze
+      else if (VoidState.phaseIndex === 2) yTarget = cp.y - 0.8; // Below gaze, escalation
+      else yTarget = cp.y - 0.6;                                  // Peak: mid-low
+      this.el.object3D.position.y += (yTarget - this.el.object3D.position.y) * 0.05;
+      this.el.object3D.position.z = -3.5;
+    }
+    if (this.dur > 0) {
+      this.dur -= delta;
+      if (this.dur < 800) this.txt.setAttribute('opacity', Math.max(0, this.dur / 800 * 0.85));
+    } else if (time > this.next) { this.show(); }
+  },
+  show: function() {
+    var pool = getTheme().voice.narrative[VoidState.phaseIndex];
+    if (!pool || !pool.length) return;
+    var idx; do { idx = Math.floor(Math.random() * pool.length); } while (idx === this.li && pool.length > 1);
+    this.li = idx;
+    this.txt.setAttribute('value', pool[idx]);
+    this.txt.setAttribute('color', getTheme().ui.primary);
+    this.txt.setAttribute('opacity', 0.85);
+    this.dur = 2500 + (1 - VoidState.intensity) * 1500;
+    var interval = 6500 - VoidState.phaseIndex * 1200 - VoidState.intensity * 1500;
+    this.next = performance.now() + Math.max(interval, 2500) + Math.random() * 2000;
+  }
+});
+
+// ─── MANTRA TEXT ── 45° diagonals ──────────────────────────
+// Shows mantras at front-left and front-right, angled toward user
+AFRAME.registerComponent('void-mantra', {
+  schema: { side:{type:'string',default:'left'} },
+  init: function() {
+    this.txt = this.el.querySelector('a-text');
+    this.dur = 0; this.li = -1;
+    this.next = 7000 + (this.data.side === 'right' ? 4000 : 0);
+    VoidEvents.on('theme:change', function() { this.txt.setAttribute('color', getTheme().ui.primary); }.bind(this));
+  },
+  tick: function(time, delta) {
+    if (!VoidState.running || VoidState.paused || VoidState.phaseIndex < 1) {
+      this.txt.setAttribute('opacity', 0); return;
+    }
+    // Follow camera height
+    var cam = document.querySelector('[camera]');
+    if (cam) {
+      var cp = new THREE.Vector3(); cam.object3D.getWorldPosition(cp);
+      this.el.object3D.position.y += (cp.y - 0.3 - this.el.object3D.position.y) * 0.05;
+    }
+    if (this.dur > 0) {
+      this.dur -= delta;
+      if (this.dur < 1000) this.txt.setAttribute('opacity', Math.max(0, this.dur / 1000 * 0.65));
+    } else if (time > this.next) { this.show(); }
+  },
+  show: function() {
+    var lv = Math.min(VoidState.phaseIndex, 3);
+    var pool = getTheme().voice.mantras[lv] || getTheme().voice.mantras[1];
+    if (!pool || !pool.length) return;
+    var idx; do { idx = Math.floor(Math.random() * pool.length); } while (idx === this.li && pool.length > 1);
+    this.li = idx;
+    this.txt.setAttribute('value', pool[idx]);
+    this.txt.setAttribute('color', getTheme().ui.primary);
+    this.txt.setAttribute('opacity', 0.65);
+    this.dur = 3500;
+    var interval = 9000 - VoidState.phaseIndex * 1500;
+    this.next = performance.now() + Math.max(interval, 4000) + Math.random() * 3000;
+  }
+});
+
+// ─── SUBLIMINAL FLASH ──────────────────────────────────────
+AFRAME.registerComponent('void-subliminal', {
+  init: function() { this.txt = document.getElementById('subliminalText'); this.nxt = 15000; this.fd = 0; },
+  tick: function(time, delta) {
+    if (!VoidState.running || VoidState.paused || VoidState.phaseIndex < 1) return;
+    var cam = document.querySelector('[camera]');
+    if (cam) { var cp = new THREE.Vector3(); cam.object3D.getWorldPosition(cp); this.el.object3D.position.y = cp.y; this.el.object3D.position.z = -2.5; }
+    if (this.fd > 0) { this.fd -= delta; if (this.fd <= 0) this.txt.setAttribute('opacity', 0); }
+    else if (time > this.nxt) {
+      var s = getTheme().voice.subliminals;
+      this.txt.setAttribute('value', s[Math.floor(Math.random() * s.length)]);
+      this.txt.setAttribute('color', getTheme().ui.primary);
+      this.txt.setAttribute('opacity', 0.9);
+      this.fd = 120 + Math.random() * 180;
+      this.nxt = performance.now() + (10000 - VoidState.phaseIndex * 2000) + Math.random() * 5000;
+    }
+  }
+});
+
+// ─── POPPERS RUSH ──────────────────────────────────────────
+// Big prominent text that fills your view
+AFRAME.registerComponent('void-poppers', {
+  init: function() {
+    this.txt = document.getElementById('poppersText');
+    this.nxt = 45000; // First poppers at 45s
+    this.dur = 0;
+    this.stage = 0; // 0=waiting, 1=INHALE, 2=HOLD, 3=EXHALE
+    this.stageTime = 0;
+  },
+  tick: function(time, delta) {
+    if (!VoidState.running || VoidState.paused || !VoidState.poppersEnabled) return;
+    if (VoidState.phaseIndex < 1) return; // Not during INIT
+    
+    var cam = document.querySelector('[camera]');
+    if (cam) { var cp = new THREE.Vector3(); cam.object3D.getWorldPosition(cp); this.el.object3D.position.y = cp.y - 0.2; this.el.object3D.position.z = -2; }
+    
+    if (this.stage > 0) {
+      this.stageTime -= delta;
+      if (this.stageTime <= 0) {
+        this.stage++;
+        if (this.stage === 2) {
+          this.txt.setAttribute('value', 'HOLD IT');
+          this.txt.setAttribute('opacity', 0.9);
+          this.stageTime = 3000;
+        } else if (this.stage === 3) {
+          this.txt.setAttribute('value', 'EXHALE');
+          this.txt.setAttribute('opacity', 0.7);
+          this.stageTime = 2000;
+        } else {
+          // Done
+          this.stage = 0;
+          this.txt.setAttribute('opacity', 0);
+          // Next poppers: 30-60s depending on phase
+          var base = 50000 - VoidState.phaseIndex * 10000;
+          this.nxt = performance.now() + Math.max(base, 20000) + Math.random() * 15000;
+        }
+      }
+      // Pulse opacity during stages
+      if (this.stage > 0) {
+        var p = 0.7 + 0.3 * Math.sin(time * 0.005);
+        this.txt.setAttribute('opacity', p);
+      }
+    } else if (time > this.nxt) {
+      // Start poppers sequence
+      var rush = getTheme().voice.poppersRush;
+      this.txt.setAttribute('value', rush[Math.floor(Math.random() * rush.length)]);
+      this.txt.setAttribute('color', getTheme().ui.accent || getTheme().ui.primary);
+      this.txt.setAttribute('opacity', 0.95);
+      this.stage = 1;
+      this.stageTime = 4000; // Show rush text 4s, then HOLD
+    }
+  }
+});
+
+// ─── PERMISSION / DENIAL ───────────────────────────────────
+// Active during PEAK phase — denies, makes user beg, eventually releases
+AFRAME.registerComponent('void-permission', {
+  init: function() {
+    this.txt = document.getElementById('permissionText');
+    this.nxt = 0; this.dur = 0; this.released = false;
+    VoidEvents.on('phase:change', function(d) {
+      if (d.to === 'PEAK') { this.nxt = performance.now() + 5000; this.released = false; }
+      if (d.to === 'RELEASE' && !this.released) { this.doRelease(); }
+    }.bind(this));
+  },
+  tick: function(time, delta) {
+    if (!VoidState.running || VoidState.paused || !VoidState.permissionEnabled) return;
+    if (VoidState.phaseIndex < 3) { this.txt.setAttribute('opacity', 0); return; }
+    
+    var cam = document.querySelector('[camera]');
+    if (cam) { var cp = new THREE.Vector3(); cam.object3D.getWorldPosition(cp); this.el.object3D.position.y = cp.y; this.el.object3D.position.z = -3; }
+    
+    if (this.dur > 0) {
+      this.dur -= delta;
+      if (this.dur < 1000) this.txt.setAttribute('opacity', Math.max(0, this.dur / 1000 * 0.9));
+    } else if (time > this.nxt && !this.released) {
+      var denial = getTheme().voice.denial;
+      this.txt.setAttribute('value', denial[Math.floor(Math.random() * denial.length)]);
+      this.txt.setAttribute('color', getTheme().ui.primary);
+      this.txt.setAttribute('opacity', 0.9);
+      this.dur = 3000;
+      this.nxt = performance.now() + 6000 + Math.random() * 4000;
+    }
+  },
+  doRelease: function() {
+    this.released = true;
+    var rel = getTheme().voice.release;
+    this.txt.setAttribute('value', rel[Math.floor(Math.random() * rel.length)]);
+    this.txt.setAttribute('color', getTheme().ui.accent || '#ffffff');
+    this.txt.setAttribute('opacity', 1.0);
+    this.dur = 5000;
+  }
+});
+
+// ─── TICKER ── Scrolling text at feet ──────────────────────
+AFRAME.registerComponent('void-ticker', {
+  init: function() {
+    this.txt = document.getElementById('tickerText');
+    this.offset = 0; this.tickerIdx = 0;
+  },
+  tick: function(time, delta) {
+    if (!VoidState.running || VoidState.paused) { this.txt.setAttribute('opacity', 0); return; }
+    if (VoidState.phaseIndex < 1) { this.txt.setAttribute('opacity', 0); return; }
+    
+    var cam = document.querySelector('[camera]');
+    if (cam) {
+      var cp = new THREE.Vector3(); cam.object3D.getWorldPosition(cp);
+      this.el.object3D.position.y = cp.y - 1.2;
+      this.el.object3D.position.z = -2.5;
+    }
+    
+    // Slowly cycle through ticker messages
+    this.offset += delta * 0.0005;
+    if (this.offset > 1) {
+      this.offset = 0;
+      var tickers = getTheme().voice.ticker;
+      if (tickers && tickers.length) {
+        this.tickerIdx = (this.tickerIdx + 1) % tickers.length;
+        this.txt.setAttribute('value', tickers[this.tickerIdx]);
+        this.txt.setAttribute('color', getTheme().ui.primary);
+      }
+    }
+    this.txt.setAttribute('opacity', 0.15 + VoidState.intensity * 0.15);
+  }
+});
+
+// ─── AMBIENT PARTICLES ─────────────────────────────────────
+// Floating motes that drift around the user
+AFRAME.registerComponent('void-particles', {
+  init: function() {
+    this.particles = [];
+    this.spawned = false;
+  },
+  tick: function(time, delta) {
+    if (!VoidState.running) return;
+    if (!this.spawned) { this.spawnParticles(); this.spawned = true; }
+    
+    var c = getTheme().ui.primary;
+    var t = time * 0.001;
+    
+    for (var i = 0; i < this.particles.length; i++) {
+      var p = this.particles[i];
+      // Gentle orbital drift
+      var angle = p.baseAngle + t * p.speed;
+      var radius = p.baseRadius + Math.sin(t * p.bob) * 0.5;
+      var x = Math.cos(angle) * radius;
+      var z = Math.sin(angle) * radius;
+      var y = p.baseY + Math.sin(t * p.bob + i) * 0.3;
+      p.el.object3D.position.set(x, y, z);
+      
+      // Pulse opacity with breathing
+      var op = (0.15 + 0.1 * Math.sin(t * 2 + i)) * VoidState.intensity;
+      p.el.setAttribute('opacity', op);
+      p.el.setAttribute('color', c);
+    }
+  },
+  spawnParticles: function() {
+    for (var i = 0; i < 20; i++) {
+      var sphere = document.createElement('a-sphere');
+      var radius = 0.02 + Math.random() * 0.04;
+      sphere.setAttribute('radius', radius);
+      sphere.setAttribute('color', getTheme().ui.primary);
+      sphere.setAttribute('opacity', 0.2);
+      sphere.setAttribute('material', 'shader: flat');
+      this.el.appendChild(sphere);
+      this.particles.push({
+        el: sphere,
+        baseAngle: Math.random() * Math.PI * 2,
+        baseRadius: 2 + Math.random() * 5,
+        baseY: 0.5 + Math.random() * 3,
+        speed: 0.05 + Math.random() * 0.15,
+        bob: 0.3 + Math.random() * 0.5,
+      });
+    }
+    console.log('Particles: 20 spawned');
+  }
+});
+
+// Controller input
+AFRAME.registerComponent('void-controller', {
+  schema: { hand:{type:'string',default:'right'} },
+  init: function() {
+    var h = this.data.hand;
+    VoidState.controllers[h] = this.el;
+    this.el.addEventListener('triggerdown', function() { VoidEvents.emit('input:trigger',{hand:h}); });
+    this.el.addEventListener('gripdown', function() { VoidEvents.emit('input:grip',{hand:h}); });
+    this.el.addEventListener('abuttondown', function() { VoidEvents.emit('input:a-button',{hand:h}); });
+    this.el.addEventListener('bbuttondown', function() { VoidEvents.emit('input:b-button',{hand:h}); });
+    this.el.addEventListener('xbuttondown', function() { VoidEvents.emit('input:x-button',{hand:h}); });
+    this.el.addEventListener('ybuttondown', function() { VoidEvents.emit('input:y-button',{hand:h}); });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// AUDIO ENGINE
+// ═══════════════════════════════════════════════════════════════
+
+var audioCtx, masterGain, droneL, droneR, subOsc;
+
+function initAudio() {
+  if (audioCtx) return;
+  try {
+    var th = getTheme();
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain(); masterGain.gain.value = 0; masterGain.connect(audioCtx.destination);
+    
+    droneL = audioCtx.createOscillator(); droneL.type = 'sine'; droneL.frequency.value = th.audio.baseFreq;
+    var gL = audioCtx.createGain(); gL.gain.value = 0.12;
+    var pL = audioCtx.createStereoPanner(); pL.pan.value = -1;
+    droneL.connect(gL).connect(pL).connect(masterGain);
+    
+    droneR = audioCtx.createOscillator(); droneR.type = 'sine'; droneR.frequency.value = th.audio.baseFreq + th.audio.binauralDiff;
+    var gR = audioCtx.createGain(); gR.gain.value = 0.12;
+    var pR = audioCtx.createStereoPanner(); pR.pan.value = 1;
+    droneR.connect(gR).connect(pR).connect(masterGain);
+    
+    subOsc = audioCtx.createOscillator(); subOsc.type = 'sine'; subOsc.frequency.value = th.audio.subBass;
+    var sG = audioCtx.createGain(); sG.gain.value = 0.08;
+    subOsc.connect(sG).connect(masterGain);
+    
+    droneL.start(); droneR.start(); subOsc.start();
+    masterGain.gain.setTargetAtTime(th.audio.volume, audioCtx.currentTime, 3);
+    console.log('Audio: ' + th.audio.baseFreq + '+' + th.audio.binauralDiff + 'Hz');
+  } catch(e) { console.error('Audio: ' + e); }
+}
+
+function updateAudioForTheme() {
+  if (!audioCtx) return;
+  try {
+    var th = getTheme();
+    droneL.frequency.setTargetAtTime(th.audio.baseFreq, audioCtx.currentTime, 0.5);
+    droneR.frequency.setTargetAtTime(th.audio.baseFreq + th.audio.binauralDiff, audioCtx.currentTime, 0.5);
+    subOsc.frequency.setTargetAtTime(th.audio.subBass, audioCtx.currentTime, 0.5);
+    masterGain.gain.setTargetAtTime(th.audio.volume, audioCtx.currentTime, 1);
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WAVE SYSTEM + SESSION MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+
+var PHASE_CONFIG = {
+  quick:{INIT:0.15,ENTRAINMENT:0.25,ESCALATION:0.30,PEAK:0.20,RELEASE:0.10},
+  standard:{INIT:0.10,ENTRAINMENT:0.20,ESCALATION:0.35,PEAK:0.25,RELEASE:0.10},
+  extended:{INIT:0.07,ENTRAINMENT:0.15,ESCALATION:0.38,PEAK:0.30,RELEASE:0.10},
+  marathon:{INIT:0.05,ENTRAINMENT:0.10,ESCALATION:0.40,PEAK:0.35,RELEASE:0.10},
+};
+var PHASE_INTENSITY = {INIT:0.3,ENTRAINMENT:0.5,ESCALATION:0.7,PEAK:1.0,RELEASE:0.4};
+var PHASE_BREATH_RATE = {INIT:6,ENTRAINMENT:5,ESCALATION:4,PEAK:3,RELEASE:5};
+
+function updateWave(delta) {
+  if (!VoidState.running || VoidState.paused) return;
+  VoidState.waveProgress += delta;
+  if (VoidState.waveProgress >= VoidState.waveCycleTime) {
+    VoidState.waveProgress = 0;
+    if (VoidState.waveState === 'BUILD') {
+      VoidState.waveState = 'CREST';
+      VoidState.targetIntensity = Math.max(VoidState.targetIntensity * 0.85, VoidState.waveFloor);
+    } else {
+      VoidState.waveState = 'BUILD';
+      VoidState.targetIntensity = PHASE_INTENSITY[VoidState.phaseNames[VoidState.phaseIndex]];
+    }
+    VoidState.waveFloor = Math.min(VoidState.waveFloor + 0.03, 0.6);
+    VoidEvents.emit('wave:change', {state: VoidState.waveState});
+  }
+}
+
+function updatePhase() {
+  if (!VoidState.running || VoidState.paused) return;
+  var el = Date.now() - VoidState.sessionStart;
+  var dur = VoidState.presetDurations[VoidState.preset];
+  var prog = Math.min(el / dur, 1.0);
+  var cfg = PHASE_CONFIG[VoidState.preset];
+  var acc = 0, ni = 0;
+  var ph = ['INIT','ENTRAINMENT','ESCALATION','PEAK','RELEASE'];
+  for (var i = 0; i < ph.length; i++) {
+    var pe = acc + cfg[ph[i]];
+    if (prog < pe) { ni = i; break; }
+    acc = pe; ni = i;
+  }
+  if (ni !== VoidState.phaseIndex) {
+    var op = VoidState.phaseNames[VoidState.phaseIndex];
+    var np = VoidState.phaseNames[ni];
+    VoidState.phaseIndex = ni;
+    VoidState.targetIntensity = PHASE_INTENSITY[np];
+    VoidState.breathRate = PHASE_BREATH_RATE[np];
+    VoidEvents.emit('phase:change', {from:op, to:np, index:ni});
+    console.log('Phase: ' + op + ' > ' + np);
+  }
+  VoidState.phaseProgress = prog;
+  if (prog >= 1.0) endSession();
+}
+
+setInterval(updatePhase, 1000);
+var lwt = performance.now();
+setInterval(function() { var n = performance.now(); updateWave(n - lwt); lwt = n; }, 100);
+
+function startSession() {
+  VoidState.running = true; VoidState.paused = false;
+  VoidState.sessionStart = Date.now();
+  VoidState.targetIntensity = PHASE_INTENSITY.INIT;
+  VoidState.phaseIndex = 0; VoidState.waveFloor = 0.3;
+  VoidState.waveState = 'BUILD'; VoidState.waveProgress = 0;
+  VoidEvents.emit('session:start', {preset:VoidState.preset, theme:VoidState.currentTheme});
+  console.log('Session [' + VoidState.preset + '] ' + getTheme().name);
+}
+function pauseSession() { VoidState.paused = true; VoidEvents.emit('session:pause',{}); console.log('Paused'); }
+function resumeSession() { VoidState.paused = false; VoidEvents.emit('session:resume',{}); console.log('Resumed'); }
+function endSession() {
+  VoidState.running = false;
+  VoidState.sessionDuration = Date.now() - VoidState.sessionStart;
+  VoidEvents.emit('session:end', {duration: VoidState.sessionDuration});
+  console.log('Ended: ' + Math.round(VoidState.sessionDuration/1000) + 's');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INPUT HANDLERS
+// ═══════════════════════════════════════════════════════════════
+
+VoidEvents.on('input:trigger', function(d) {
+  if (d.hand === 'right') { if (!VoidState.running) startSession(); else VoidState.targetIntensity = Math.min(VoidState.targetIntensity + 0.1, 1.0); }
+  if (d.hand === 'left') VoidState.targetIntensity = Math.max(VoidState.targetIntensity - 0.1, 0.2);
+});
+VoidEvents.on('input:grip', function(d) { if (d.hand === 'right' && VoidState.running) VoidState.paused ? resumeSession() : pauseSession(); });
+VoidEvents.on('input:a-button', function() {
+  var ns = Object.keys(THEMES);
+  VoidState.currentTheme = ns[(ns.indexOf(VoidState.currentTheme) + 1) % ns.length];
+  VoidEvents.emit('theme:change', {theme: VoidState.currentTheme});
+  updateAudioForTheme(); applyThemeToScene(); Settings.save();
+  console.log('Theme > ' + getTheme().name);
+});
+VoidEvents.on('input:b-button', function() {
+  VoidState.debugVisible = !VoidState.debugVisible;
+  var d = document.getElementById('debugConsole');
+  if (d) d.setAttribute('visible', VoidState.debugVisible);
+});
+
+// ═══════════════════════════════════════════════════════════════
+// THEME APPLICATION
+// ═══════════════════════════════════════════════════════════════
+
+function applyThemeToScene() {
+  var th = getTheme();
+  var fl = document.getElementById('floorPlane');
+  if (fl) fl.setAttribute('material', 'color', th.ui.floor);
+  ['floorRing1','floorRing2','floorRing3'].forEach(function(id) {
+    var r = document.getElementById(id); if (r) r.setAttribute('color', th.ui.primary);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ENTRY UI
+// ═══════════════════════════════════════════════════════════════
+
+function buildEntryUI() {
+  var sel = document.getElementById('themeSelector');
+  Object.keys(THEMES).forEach(function(id) {
+    var btn = document.createElement('button');
+    btn.className = 'theme-btn' + (id === VoidState.currentTheme ? ' active' : '');
+    btn.textContent = THEMES[id].name;
+    btn.addEventListener('click', function() {
+      VoidState.currentTheme = id;
+      document.querySelectorAll('.theme-btn').forEach(function(b){b.classList.remove('active');});
+      btn.classList.add('active');
+      document.getElementById('themeTagline').textContent = THEMES[id].subtitle;
+      var h1 = document.querySelector('.overlay h1');
+      h1.style.color = THEMES[id].ui.primary;
+      h1.style.textShadow = '0 0 40px ' + THEMES[id].ui.primary + '80';
+      Settings.save();
+    });
+    sel.appendChild(btn);
+  });
+  
+  document.querySelectorAll('.preset-dot').forEach(function(dot) {
+    dot.addEventListener('click', function() {
+      VoidState.preset = dot.dataset.preset;
+      document.querySelectorAll('.preset-dot').forEach(function(d){d.classList.remove('active');});
+      dot.classList.add('active');
+      document.getElementById('presetLabel').textContent = VoidState.presetLabels[VoidState.preset];
+      Settings.save();
+    });
+    if (dot.dataset.preset === VoidState.preset) dot.classList.add('active');
+    else dot.classList.remove('active');
+  });
+  
+  document.getElementById('presetLabel').textContent = VoidState.presetLabels[VoidState.preset];
+  document.getElementById('themeTagline').textContent = getTheme().subtitle;
+  var h1 = document.querySelector('.overlay h1');
+  h1.style.color = getTheme().ui.primary;
+  h1.style.textShadow = '0 0 40px ' + getTheme().ui.primary + '80';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FILE SYSTEM ACCESS (safe async)
+// ═══════════════════════════════════════════════════════════════
+
+function linkContentFolder() {
+  var result = document.getElementById('fsResult');
+  result.textContent = 'Opening...';
+  if (!('showDirectoryPicker' in window)) { result.textContent = 'Not supported'; return; }
+  
+  window.showDirectoryPicker({mode:'read'}).then(function(handle) {
+    var count = 0;
+    var iter = handle.values();
+    function countNext() {
+      iter.next().then(function(r) {
+        if (r.done) {
+          VoidState.contentFolderHandle = handle;
+          VoidState.contentCount = count;
+          VoidState.contentLoaded = true;
+          result.textContent = handle.name + ': ' + count + ' media linked!';
+          console.log('Content: ' + count);
+          // Try persist
+          try {
+            var req = indexedDB.open('void-fs', 1);
+            req.onupgradeneeded = function() { req.result.createObjectStore('handles'); };
+            req.onsuccess = function() {
+              var tx = req.result.transaction('handles', 'readwrite');
+              tx.objectStore('handles').put(handle, 'content');
+              req.result.close();
+            };
+          } catch(e) {}
+        } else {
+          if (r.value.kind === 'file' && r.value.name.match(/\.(jpg|jpeg|png|gif|webp|mp4|webm|mov)$/i)) count++;
+          countNext();
+        }
+      }).catch(function() { result.textContent = 'Error reading'; });
+    }
+    countNext();
+  }).catch(function(e) {
+    result.textContent = e.name === 'AbortError' ? 'Cancelled' : 'Error: ' + e.message;
+  });
+}
+
+function restoreContentFolder() {
+  try {
+    var req = indexedDB.open('void-fs', 1);
+    req.onupgradeneeded = function() { req.result.createObjectStore('handles'); };
+    req.onsuccess = function() {
+      var db = req.result;
+      try {
+        var tx = db.transaction('handles', 'readonly');
+        var gr = tx.objectStore('handles').get('content');
+        gr.onsuccess = function() {
+          var handle = gr.result;
+          db.close();
+          if (!handle) return;
+          handle.queryPermission({mode:'read'}).then(function(perm) {
+            if (perm === 'granted') {
+              VoidState.contentFolderHandle = handle;
+              VoidState.contentLoaded = true;
+              document.getElementById('fsResult').textContent = handle.name + ' (auto-linked)';
+              document.getElementById('testFS').textContent = '📁 Re-link';
+              console.log('Folder restored');
+            }
+          }).catch(function() {});
+        };
+        gr.onerror = function() { db.close(); };
+      } catch(e) { db.close(); }
+    };
+    req.onerror = function() {};
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+
+var scene = document.getElementById('scene');
+var overlay = document.getElementById('overlay');
+
+Settings.load();
+buildEntryUI();
+restoreContentFolder();
+
+function startExperience() {
+  overlay.classList.add('hidden');
+  initAudio(); applyThemeToScene(); startSession(); Settings.save();
+}
+
+document.getElementById('enterVR').addEventListener('click', function() {
+  startExperience(); scene.enterVR();
+});
+document.getElementById('enter2D').addEventListener('click', function() { startExperience(); });
+document.getElementById('testFS').addEventListener('click', linkContentFolder);
+
+scene.addEventListener('enter-vr', function() { VoidState.inVR = true; VoidEvents.emit('vr:enter',{}); console.log('VR active'); });
+scene.addEventListener('exit-vr', function() { VoidState.inVR = false; VoidEvents.emit('vr:exit',{}); });
+scene.addEventListener('loaded', function() {
+  console.log('A-Frame loaded'); applyThemeToScene();
+  setTimeout(function() {
+    var cam = document.querySelector('[camera]');
+    if (cam) { var p = new THREE.Vector3(); cam.object3D.getWorldPosition(p); VoidState.userHeight = p.y; console.log('H: ' + p.y.toFixed(2) + 'm'); }
+  }, 1000);
+});
+
+setInterval(function() {
+  if (VoidState.running) {
+    var el = Math.round((Date.now() - VoidState.sessionStart) / 1000);
+    console.log(Math.floor(el/60)+':'+String(el%60).padStart(2,'0')+' '+VoidState.phaseNames[VoidState.phaseIndex]+' i='+VoidState.targetIntensity.toFixed(1)+' '+VoidState.waveState);
+  }
+}, 15000);
+
+console.log('[VOID] v3.2 Ready');
+console.log('R-Trig=start A=theme B=debug');
+console.log('Poppers: ON | Permission: ON');
+</script>
+</body>
+</html>
